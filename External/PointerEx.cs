@@ -1,17 +1,18 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace System
 {
-    public class PointerEx
+    public struct PointerEx
     {
         public IntPtr IntPtr { get; set; }
         public PointerEx(IntPtr value)
         {
-            this.IntPtr = value;
+            IntPtr = value;
         }
 
         #region overrides
@@ -30,9 +31,33 @@ namespace System
             return px.Add(pxo);
         }
 
+        public static PointerEx operator -(PointerEx px, PointerEx pxo)
+        {
+            return px.Subtract(pxo);
+        }
+
+        public static bool operator <(PointerEx px, PointerEx pxo)
+        {
+            return IntPtr.Size == sizeof(int) ? ((int)px < (int)pxo) : ((long)px < (long)pxo);
+        }
+        public static bool operator >(PointerEx px, PointerEx pxo)
+        {
+            return IntPtr.Size == sizeof(int) ? ((int)px > (int)pxo) : ((long)px > (long)pxo);
+        }
+
+        public static bool operator ==(PointerEx px, PointerEx pxo)
+        {
+            return px.IntPtr == pxo.IntPtr;
+        }
+
+        public static bool operator !=(PointerEx px, PointerEx pxo)
+        {
+            return px.IntPtr != pxo.IntPtr;
+        }
+
         public static implicit operator bool(PointerEx px)
         {
-            return px != IntPtr.Zero;
+            return px.IntPtr != IntPtr.Zero;
         }
 
         public static implicit operator int(PointerEx px)
@@ -77,7 +102,12 @@ namespace System
 
         public override string ToString()
         {
-            return this.IntPtr.ToInt64().ToString($"X{IntPtr.Size * 2}");
+            return IntPtr.ToInt64().ToString($"X{IntPtr.Size * 2}");
+        }
+
+        public PointerEx Clone()
+        {
+            return new PointerEx(IntPtr);
         }
         #endregion
     }

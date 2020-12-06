@@ -19,6 +19,19 @@ namespace System
         public const int PROCESS_VM_WRITE = 0x0020;
         public const int PROCESS_VM_OPERATION = 0x0008;
         public const int MEM_DECOMMIT = 0x4000;
+        public const int MEM_FREE = 0x10000;
+        public const int MEM_COMMIT = 0x00001000;
+        public const int MEM_RESERVE = 0x00002000;
+        public const int MEM_PRIVATE = 0x20000;
+        public const int MEM_IMAGE = 0x1000000;
+        public const uint PAGE_GUARD = 0x100;
+        public const uint PAGE_NOACCESS = 0x01;
+        public const uint PAGE_READONLY = 0x02;
+        public const uint PAGE_WRITECOPY = 0x08;
+        public const uint PAGE_EXECUTE_READWRITE = 0x40;
+        public const uint PAGE_EXECUTE_WRITECOPY = 0x80;
+        public const uint PAGE_EXECUTE = 0x10;
+        public const uint PAGE_EXECUTE_READ = 0x20;
         #endregion
 
         #region typedef
@@ -28,9 +41,9 @@ namespace System
             internal ushort wProcessorArchitecture;
             internal ushort wReserved;
             internal uint dwPageSize;
-            internal IntPtr lpMinimumApplicationAddress;
-            internal IntPtr lpMaximumApplicationAddress;
-            internal IntPtr dwActiveProcessorMask;
+            internal PointerEx lpMinimumApplicationAddress;
+            internal PointerEx lpMaximumApplicationAddress;
+            internal PointerEx dwActiveProcessorMask;
             internal uint dwNumberOfProcessors;
             internal uint dwProcessorType;
             internal uint dwAllocationGranularity;
@@ -68,13 +81,13 @@ namespace System
             WriteCombineModifierflag = 0x400
         }
 
-        public struct MEMORY_BASIC_INFORMATION_64
+        public struct MEMORY_BASIC_INFORMATION
         {
-            public IntPtr BaseAddress;
-            public IntPtr AllocationBase;
+            public PointerEx BaseAddress;
+            public PointerEx AllocationBase;
             public uint AllocationProtect;
             public uint __alignment1;
-            public IntPtr RegionSize;
+            public PointerEx RegionSize;
             public uint State;
             public uint Protect;
             public uint Type;
@@ -84,39 +97,41 @@ namespace System
 
         #region dllimport
         [DllImport("kernel32.dll")]
-        public static extern IntPtr OpenProcess(int dwDesiredAccess, bool bInheritHandle, int dwProcessId);
+        public static extern PointerEx OpenProcess(int dwDesiredAccess, bool bInheritHandle, int dwProcessId);
 
         [DllImport("kernel32.dll")]
-        public static extern bool ReadProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, [Out] byte[] lpBuffer, IntPtr dwSize, ref IntPtr lpNumberOfBytesRead);
+        public static extern bool ReadProcessMemory(PointerEx hProcess, PointerEx lpBaseAddress, [Out] byte[] lpBuffer, PointerEx dwSize, ref PointerEx lpNumberOfBytesRead);
 
         [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool GetExitCodeProcess(IntPtr hProcess, out uint ExitCode);
+        public static extern bool GetExitCodeProcess(PointerEx hProcess, out uint ExitCode);
 
         [DllImport("kernel32.dll")]
-        public static extern int GetProcessId(IntPtr handle);
+        public static extern int GetProcessId(PointerEx handle);
 
         [DllImport("kernel32.dll")]
         public static extern void GetSystemInfo(out SYSTEM_INFO lpSystemInfo);
         
         [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern int VirtualQueryEx(IntPtr hProcess, IntPtr lpAddress, out MEMORY_BASIC_INFORMATION_64 lpBuffer, uint dwLength);
+        public static extern PointerEx VirtualQueryEx(PointerEx hProcess, PointerEx lpAddress, out MEMORY_BASIC_INFORMATION lpBuffer, uint dwLength);
 
         [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool WriteProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] lpBuffer, int dwSize, ref IntPtr lpNumberOfBytesWritten);
+        public static extern bool WriteProcessMemory(PointerEx hProcess, PointerEx lpBaseAddress, byte[] lpBuffer, int dwSize, ref PointerEx lpNumberOfBytesWritten);
 
         [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool VirtualAlloc2(IntPtr hProcess, IntPtr lpBaseAddress, int RegionSize, ulong AllocType, ulong PageProtection);
+        public static extern bool VirtualAlloc2(PointerEx hProcess, PointerEx lpBaseAddress, int RegionSize, ulong AllocType, ulong PageProtection);
 
         [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
-        public static extern IntPtr VirtualAllocEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize, AllocationType flAllocationType, MemoryProtection flProtect);
+        public static extern PointerEx VirtualAllocEx(PointerEx hProcess, PointerEx lpAddress, uint dwSize, AllocationType flAllocationType, MemoryProtection flProtect);
 
         [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
-        public static extern bool VirtualFreeEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize, int dwFreeType);
+        public static extern bool VirtualFreeEx(PointerEx hProcess, PointerEx lpAddress, uint dwSize, int dwFreeType);
         #endregion
 
+        #region methods
         public ProcessEx(Process p, bool openHandle = true) 
         {
             BaseProcess = p;
+            p.EnableRaisingEvents = true;
             p.Exited += P_Exited;
             if(openHandle) OpenHandle();
         }
@@ -129,7 +144,7 @@ namespace System
         public PointerEx OpenHandle(int dwDesiredAccess = PROCESS_ACCESS, bool newOnly = false) 
         {
             if (BaseProcess.HasExited) return IntPtr.Zero;
-            if (Handle == IntPtr.Zero || newOnly) Handle = OpenProcess(dwDesiredAccess, false, BaseProcess.Id);
+            if (Handle.IntPtr == IntPtr.Zero || newOnly) Handle = OpenProcess(dwDesiredAccess, false, BaseProcess.Id);
             return Handle;
         }
 
@@ -179,7 +194,7 @@ namespace System
         {
             if (!Handle) throw new InvalidOperationException("Tried to read from a memory region when a handle to the desired process doesn't exist");
             byte[] data = new byte[NumBytes];
-            IntPtr bytesRead = IntPtr.Zero;
+            PointerEx bytesRead = IntPtr.Zero;
             ReadProcessMemory(Handle, absoluteAddress, data, NumBytes, ref bytesRead);
             if (bytesRead != NumBytes) throw new InvalidOperationException($"Failed to read data of size {NumBytes} from address 0x{absoluteAddress}");
             return data;
@@ -188,9 +203,9 @@ namespace System
         public void SetBytes(PointerEx absoluteAddress, byte[] data) 
         {
             if (!Handle) throw new InvalidOperationException("Tried to write to a memory region when a handle to the desired process doesn't exist");
-            IntPtr bytesWritten = IntPtr.Zero;
+            PointerEx bytesWritten = IntPtr.Zero;
             WriteProcessMemory(Handle, absoluteAddress, data, data.Length, ref bytesWritten);
-            if (new PointerEx(bytesWritten) != data.Length) throw new InvalidOperationException($"Failed to write {data.Length} bytes to region 0x{absoluteAddress}");
+            if (bytesWritten != data.Length) throw new InvalidOperationException($"Failed to write {data.Length} bytes to region 0x{absoluteAddress}");
         }
 
         public T GetStruct<T>(PointerEx absoluteAddress) where T : struct
@@ -202,6 +217,47 @@ namespace System
         {
             SetBytes(absoluteAddress, s.ToByteArray());
         }
+
+        public T[] GetArray<T>(PointerEx absoluteAddress, PointerEx numItems) where T : struct
+        {
+            T[] arr = new T[numItems];
+            for(int i = 0; i < numItems; i++) arr[i] = GetStruct<T>(absoluteAddress + (i * Marshal.SizeOf(typeof(T))));
+            return arr;
+        }
+
+        public void SetArray<T>(PointerEx absoluteAddress, T[] array) where T : struct
+        {
+            for (int i = 0; i < array.Length; i++) SetStruct(absoluteAddress + (i * Marshal.SizeOf(typeof(T))), array[i]);
+        }
+
+        public string GetString(PointerEx absoluteAddress, int MaxLength = 1023, int buffSize = 256) 
+        {
+            byte[] buffer;
+            byte[] rawString = new byte[MaxLength + 1];
+            int bytesRead = 0;
+            while(bytesRead < MaxLength)
+            {
+                buffer = GetBytes(absoluteAddress + bytesRead, buffSize);
+                for(int i = 0; i < buffer.Length && i + bytesRead < MaxLength; i++)
+                {
+                    if (buffer[i] == 0) return rawString.String();
+                    rawString[bytesRead + i] = buffer[i];
+                }
+                bytesRead += buffSize;
+            }
+            return rawString.String();
+        }
+
+        public void SetString(PointerEx absoluteAddress, string Value) 
+        {
+            SetArray(absoluteAddress, Value.Bytes());
+        }
+
+        public Task<IEnumerable<PointerEx>> FindPattern(string query, PointerEx start, PointerEx end, MemorySearchFlags flags)
+        {
+            return new MemorySearcher(this).Search(query, start, end, flags);
+        }
+        #endregion
 
         #region overrides
         public static implicit operator ProcessEx(Process p)
@@ -219,6 +275,11 @@ namespace System
             var list = Process.GetProcessesByName(name);
             if (list.Length < 1) return null;
             return list[0];
+        }
+
+        public static implicit operator bool(ProcessEx px)
+        {
+            return px?.Handle ?? false;
         }
 
         public PointerEx this[PointerEx offset]

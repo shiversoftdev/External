@@ -1,0 +1,9 @@
+﻿Freeze/Unfreeze memory value
+Suspend/Resume Process
+Inject DLL via:
+	ThreadEx.Hijack
+	LoadLibraryA/CreateRemoteThread
+	Manual Map
+	Managed dll inject
+	SetWindowsHookEx (hijack native process)
+Search memory via byte patterns
