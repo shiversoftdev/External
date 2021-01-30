@@ -3,9 +3,13 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Linq.Expressions;
+using System.PEStructures;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
+
+using static System.ModuleLoadOptions;
+using static System.ModuleLoadType;
 
 namespace System
 {
@@ -125,11 +129,19 @@ namespace System
 
         [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
         public static extern bool VirtualFreeEx(PointerEx hProcess, PointerEx lpAddress, uint dwSize, int dwFreeType);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool CloseHandle(PointerEx hHandle);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        internal static extern bool IsWow64Process(PointerEx processHandle, out bool isWow64Process);
         #endregion
 
         #region methods
-        public ProcessEx(Process p, bool openHandle = true) 
+        public ProcessEx(Process p, bool openHandle = false) 
         {
+            if (p == null) throw new ArgumentException("Target process cannot be null");
+
             BaseProcess = p;
             p.EnableRaisingEvents = true;
             p.Exited += P_Exited;
@@ -146,6 +158,20 @@ namespace System
             if (BaseProcess.HasExited) return IntPtr.Zero;
             if (Handle.IntPtr == IntPtr.Zero || newOnly) Handle = OpenProcess(dwDesiredAccess, false, BaseProcess.Id);
             return Handle;
+        }
+
+        public void CloseHandle()
+        {
+            if (!Handle) return;
+            CloseHandle(Handle);
+            Handle = 0;
+        }
+
+        public static ProcessEx FindProc(string name, bool OpenHandle = false)
+        {
+            var list = Process.GetProcessesByName(name);
+            if (list.Length < 1) return null;
+            return new ProcessEx(list[0], OpenHandle);
         }
 
         public T GetValue<T>(PointerEx absoluteAddress) where T : new()
@@ -257,6 +283,28 @@ namespace System
         {
             return new MemorySearcher(this).Search(query, start, end, flags);
         }
+
+        public PointerEx LoadModule(Memory<byte> moduleData, ModuleLoadOptions loadOptions = MLO_None)
+        {
+            if (BaseProcess.HasExited) throw new InvalidOperationException("Cannot inject a dll to a process which has exited");
+            if (moduleData.IsEmpty) throw new ArgumentException("Cannot inject an empty dll");
+            if (Environment.Is64BitProcess != (GetArchitecture() == Architecture.X64)) throw new InvalidOperationException("Cannot map to target because the target architecture does not match the current environment (x64/x86 mismatch)");
+            var _pe = new PEImage(moduleData);
+
+            return IntPtr.Zero; // failed to load
+        }
+
+        internal Architecture GetArchitecture()
+        {
+            if (!Environment.Is64BitOperatingSystem || IsWow64Process()) return Architecture.X86;
+            return Architecture.X64;
+        }
+
+        internal bool IsWow64Process()
+        {
+            if(!IsWow64Process(BaseProcess.Handle, out bool result)) throw new ComponentModel.Win32Exception();
+            return result;
+        }
         #endregion
 
         #region overrides
@@ -272,9 +320,7 @@ namespace System
 
         public static implicit operator ProcessEx(string name)
         {
-            var list = Process.GetProcessesByName(name);
-            if (list.Length < 1) return null;
-            return list[0];
+            return FindProc(name);
         }
 
         public static implicit operator bool(ProcessEx px)
@@ -335,5 +381,15 @@ namespace System
             }
         }
         #endregion
+    }
+
+    public enum ModuleLoadType
+    { 
+        MLT_ManualMapped
+    }
+
+    public enum ModuleLoadOptions
+    {
+        MLO_None = 0
     }
 }

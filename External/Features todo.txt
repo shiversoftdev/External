@@ -1,4 +1,6 @@
 ﻿Freeze/Unfreeze memory value
+proc.Alloc(size, commit?, protect?);
+proc.CreateRemoteThread
 Suspend/Resume Process
 Inject DLL via:
 	ThreadEx.Hijack
@@ -7,3 +9,6 @@ Inject DLL via:
 	Managed dll inject
 	SetWindowsHookEx (hijack native process)
 Search memory via byte patterns
+Hijack processes for handles (rpc protocol)
+	Internal.dll?
+proc.MapFunction
