@@ -131,6 +131,10 @@
     <Compile Include="PEStructures\PEDataDirectory.cs" />
     <Compile Include="PEStructures\PEImage.cs" />
     <Compile Include="PEStructures\PEImportDirectory.cs" />
+    <Compile Include="PEStructures\PELoadConfigDirectory.cs" />
+    <Compile Include="PEStructures\PERelocationDirectory.cs" />
+    <Compile Include="PEStructures\PEResourceDirectory.cs" />
+    <Compile Include="PEStructures\PETlsDirectory.cs" />
     <Compile Include="PointerEx.cs" />
     <Compile Include="PointerExtensions.cs" />
     <Compile Include="ProcessEx.cs" />

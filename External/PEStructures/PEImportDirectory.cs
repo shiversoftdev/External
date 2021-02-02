@@ -22,10 +22,12 @@ namespace System.PEStructures
                 var lpDescriptor = DirectoryOffset + Unsafe.SizeOf<PEImageImportDescriptor>() * descriptorIndex;
                 var descriptor = MemoryMarshal.Read<PEImageImportDescriptor>(ImageData.Span.Slice(lpDescriptor));
                 if (descriptor.FirstThunk == 0) break;
+
                 // Read the descriptor name
                 var lpDescriptorName = RelativeToOffset(descriptor.Name);
                 var descriptorNameLength = ImageData.Span.Slice(lpDescriptorName).IndexOf(byte.MinValue);
                 var descriptorName = Encoding.UTF8.GetString(ImageData.Span.Slice(lpDescriptorName, descriptorNameLength).ToArray());
+
                 // Read the imports described
                 var lpOffsetTable = RelativeToOffset(descriptor.FirstThunk);
                 var lpThunkTable = descriptor.OriginalFirstThunk == 0 ? lpOffsetTable : RelativeToOffset(descriptor.OriginalFirstThunk);
@@ -96,12 +98,12 @@ namespace System.PEStructures
     public readonly struct PEImageImportDescriptor
     {
         [FieldOffset(0x0)]
-        internal readonly int OriginalFirstThunk;
+        public readonly int OriginalFirstThunk;
 
         [FieldOffset(0xC)]
-        internal readonly int Name;
+        public readonly int Name;
 
         [FieldOffset(0x10)]
-        internal readonly int FirstThunk;
+        public readonly int FirstThunk;
     }
 }
