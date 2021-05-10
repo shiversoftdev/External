@@ -1,5 +1,7 @@
-﻿using System;
+﻿using Microsoft.Win32.SafeHandles;
+using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Linq.Expressions;
@@ -7,16 +9,20 @@ using System.PEStructures;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
-
+using static System.EnvironmentEx;
 using static System.ModuleLoadOptions;
 using static System.ModuleLoadType;
+using static System.ExXMMReturnType;
+using System.Threading;
+using System.Runtime.CompilerServices;
 
 namespace System
 {
     public class ProcessEx
     {
         #region const
-        public const int PROCESS_ACCESS = PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_VM_OPERATION;
+        public const int PROCESS_CREATE_THREAD = 0x02;
+        public const int PROCESS_ACCESS = PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_VM_OPERATION | PROCESS_CREATE_THREAD;
         public const int PROCESS_QUERY_INFORMATION = 0x0400;
         public const int PAGE_READWRITE = 0x04;
         public const int PROCESS_VM_READ = 0x0010;
@@ -99,7 +105,7 @@ namespace System
         }
         #endregion
 
-        #region dllimport
+        #region pinvoke
         [DllImport("kernel32.dll")]
         public static extern PointerEx OpenProcess(int dwDesiredAccess, bool bInheritHandle, int dwProcessId);
 
@@ -135,6 +141,9 @@ namespace System
 
         [DllImport("kernel32.dll", SetLastError = true)]
         internal static extern bool IsWow64Process(PointerEx processHandle, out bool isWow64Process);
+
+        [DllImport("kernel32.dll")]
+        internal static extern PointerEx CreateRemoteThread(PointerEx hProcess, PointerEx lpThreadAttributes, uint dwStackSize, PointerEx lpStartAddress, PointerEx lpParameter, uint dwCreationFlags, out PointerEx lpThreadId);
         #endregion
 
         #region methods
@@ -288,13 +297,13 @@ namespace System
         {
             if (BaseProcess.HasExited) throw new InvalidOperationException("Cannot inject a dll to a process which has exited");
             if (moduleData.IsEmpty) throw new ArgumentException("Cannot inject an empty dll");
-            if (Environment.Is64BitProcess != (GetArchitecture() == Architecture.X64)) throw new InvalidOperationException("Cannot map to target because the target architecture does not match the current environment (x64/x86 mismatch)");
+            if (!Environment.Is64BitProcess && (GetArchitecture() == Architecture.X64)) throw new InvalidOperationException("Cannot map to target; a 32-bit injector cannot inject to a 64 bit process.");
             var _pe = new PEImage(moduleData);
 
             return IntPtr.Zero; // failed to load
         }
 
-        internal Architecture GetArchitecture()
+        public Architecture GetArchitecture()
         {
             if (!Environment.Is64BitOperatingSystem || IsWow64Process()) return Architecture.X86;
             return Architecture.X64;
@@ -304,6 +313,283 @@ namespace System
         {
             if(!IsWow64Process(BaseProcess.Handle, out bool result)) throw new ComponentModel.Win32Exception();
             return result;
+        }
+
+        public int PointerSize()
+        {
+            return GetArchitecture() == Architecture.X86 ? sizeof(uint) : sizeof(ulong);
+        }
+
+        /// <summary>
+        /// Call a remote procedure, with a return type. Arguments are not passed by reference, and may not be manipulated by the calling process. Structs are shallow copy. Will await return signal.
+        /// </summary>
+        /// <param name="absoluteAddress"></param>
+        /// <param name="args"></param>
+        /// <returns></returns>
+        public Task<T> Call<T>(PointerEx absoluteAddress, params object[] args)
+        {
+            return Call<T>(absoluteAddress, DefaultRPCType, args);
+        }
+
+        /// <summary>
+        /// Call a remote procedure, with a return type. Arguments are not passed by reference, and may not be manipulated by the calling process. Structs are shallow copy. Will await return signal.
+        /// </summary>
+        /// <param name="absoluteAddress"></param>
+        /// <param name="callType">Type of call to initiate. Some call types must be initialized to be used.</param>
+        /// <param name="args"></param>
+        /// <returns></returns>
+        public async Task<T> Call<T>(PointerEx absoluteAddress, ExCallThreadType callType, params object[] args)
+        {
+            if (!RPCStackFrame.CanSerializeType(typeof(T)))
+            {
+                throw new InvalidCastException("Cannot cast type [" + typeof(T).GetType().Name + "] to a serializable type for RPC returns");
+            }
+
+            var pointerSize = PointerSize();
+            var is64Call = pointerSize == 8;
+
+            var xmmRetType = XMMR_NONE;
+            if(typeof(T) == typeof(double))
+            {
+                xmmRetType = XMMR_DOUBLE;
+            }
+            if(typeof(T) == typeof(float))
+            {
+                xmmRetType = XMMR_SINGLE;
+            }
+
+            RPCStackFrame stackFrame = new RPCStackFrame(pointerSize);
+            foreach (var arg in args)
+            {
+                stackFrame.PushArgument(arg);
+            }
+
+            PointerEx stackSize = stackFrame.Size();
+            PointerEx hStack = QuickAlloc(stackSize);
+            try
+            {
+                byte[] stackData = stackFrame.Build(hStack);
+                var raxStorAddress = stackFrame.RAXStorOffset + hStack;
+                var threadStateAddress = stackFrame.ThreadStateOffset + hStack;
+                SetBytes(hStack, stackData);
+
+                // Next, assemble the call code
+                PointerEx[] ArgumentList = new PointerEx[args.Length];
+                byte xmmArgMask = 0;
+
+                for (int i = 0; i < args.Length; i++)
+                {
+                    ArgumentList[i] = stackFrame.GetArg(i);
+                    if(is64Call && i < 4 && stackFrame.IsArgXMM(i))
+                    {
+                        xmmArgMask |= (byte)(1 << i);
+                        if(stackFrame.IsArgXMM64(i))
+                        {
+                            xmmArgMask |= (byte)(1 << (i + 4));
+                        }
+                    }
+                }
+
+                // Write shellcode
+                byte[] shellcode = ExAssembler.CreateRemoteCall(absoluteAddress, ArgumentList, PointerSize(), raxStorAddress, xmmArgMask, xmmRetType);
+                PointerEx shellSize = shellcode.Length;
+                PointerEx hShellcode = QuickAlloc(shellSize, true);
+
+                try
+                {
+                    // Write the data for the shellcode
+                    SetBytes(hShellcode, shellcode);
+#if DEV
+                    System.IO.File.AppendAllText("log.txt", $"hShellcode: 0x{hShellcode:X}, hStack: 0x{hStack:X}\n");
+                    System.IO.File.AppendAllText("log.txt", $"shellcode: {shellcode.Hex()}\n");
+                    System.IO.File.AppendAllText("log.txt", $"stack: {stackData.Hex()}\n");
+                    Environment.Exit(0);
+#endif
+
+                    switch(callType)
+                    {
+                        case ExCallThreadType.XCTT_NtCreateThreadEx:
+                            {
+                                // Start remote thread and await its exit.
+                                StartThread(hShellcode, out SafeWaitHandle threadHandle);
+                                AwaitThreadExit(ref threadHandle);
+                            }
+                            break;
+                        case ExCallThreadType.XCTT_RIPHijack:
+                            {
+                                await CallRipHijack(hShellcode, threadStateAddress);
+                            }
+                            break;
+                    }
+
+                    if (!Handle) throw new Exception("Process exited unexpectedly...");
+
+                    // read return value
+                    PointerEx r_val = (PointerSize() == 4 ? GetValue<uint>(raxStorAddress) : GetValue<ulong>(raxStorAddress));
+
+                    // deserialize return value to expected type
+
+                    // if its a string...
+                    if(typeof(T) == typeof(string))
+                    {
+                        return (T)(dynamic)(r_val ? GetString(r_val) : "");
+                    }
+
+                    // if its a value type that fits in a pointerex...
+                    if(Marshal.SizeOf(default(T)) <= Marshal.SizeOf(default(PointerEx)))
+                    {
+                        try
+                        {
+                            return (T)(dynamic)r_val;
+                        }
+                        catch { }
+                    }
+
+                    if(r_val)
+                    {
+                        byte[] data = GetBytes(r_val, Marshal.SizeOf(default(T)));
+                        return data.ToStructUnsafe<T>();
+                    }
+                }
+                finally
+                {
+                    if (Handle)
+                    {
+                        VirtualFreeEx(Handle, hShellcode, shellSize, (int)FreeType.Release);
+                    }
+                }
+            }
+            finally
+            {
+                if(Handle)
+                {
+                    VirtualFreeEx(Handle, hStack, stackSize, (int)FreeType.Release);
+                }
+            }
+            return default(T);
+        }
+
+        /// <summary>
+        /// Call a remote procedure. Will not await a thread exit. If using an rpc method that is not thread safe, you may encounter a delayed execution of the thread, waiting for other RPC to continue.
+        /// </summary>
+        /// <param name="absoluteAddress"></param>
+        /// <param name="args"></param>
+        public void CallThreaded(PointerEx absoluteAddress, params object[] args)
+        {
+            Task.Run(() => { Call<int>(absoluteAddress, args); });
+        }
+
+        // TODO: CallRef
+
+        private async Task CallRipHijack(PointerEx shellcode, PointerEx threadStateAddress)
+        {
+            var targetThread = GetEarliestActiveThread();
+            if(targetThread == null)
+            {
+                throw new Exception("Unable to find a thread which can be hijacked.");
+            }
+
+        }
+
+        /// <summary>
+        /// Allocate readable and writable memory in the target process. If executable is true, it will also be executable. Is not managed and can be leaked, so remember to free the memory when it is no longer needed.
+        /// </summary>
+        /// <param name="size_region"></param>
+        /// <param name="Executable"></param>
+        /// <returns></returns>
+        public PointerEx QuickAlloc(PointerEx size_region, bool Executable = false)
+        {
+            if (!Handle) throw new InvalidOperationException("Tried to allocate a memory region when a handle to the desired process doesn't exist");
+            return VirtualAllocEx(Handle, 0, size_region, AllocationType.Commit, Executable ? MemoryProtection.ExecuteReadWrite : MemoryProtection.ReadWrite);
+        }
+
+        /// <summary>
+        /// Start a thread in this process, at the given address.
+        /// </summary>
+        /// <param name="address"></param>
+        /// <returns></returns>
+        public void StartThread(PointerEx address, out SafeWaitHandle threadHandle)
+        {
+            if (!Handle) throw new InvalidOperationException("Tried to create a thread in a process which has no open handle!");
+
+            var status = NtCreateThreadEx(out threadHandle, AccessMask.SpecificRightsAll | AccessMask.StandardRightsAll, IntPtr.Zero, Handle, address, IntPtr.Zero, ThreadCreationFlags.HideFromDebugger | ThreadCreationFlags.SkipThreadAttach, 0, 0, 0, IntPtr.Zero);
+            if (status != 0)
+            {
+                throw new Win32Exception(RtlNtStatusToDosError(status));
+            }
+        }
+
+        /// <summary>
+        /// Await the exit of a thread by its handle, optionally declaring the maximum time to wait.
+        /// </summary>
+        /// <param name="threadHandle"></param>
+        /// <param name="MaxMSWait"></param>
+        public void AwaitThreadExit(ref SafeWaitHandle threadHandle, int MaxMSWait = int.MaxValue)
+        {
+            if (threadHandle == null || threadHandle.IsClosed) return;
+            using (threadHandle)
+            {
+                if (WaitForSingleObject(threadHandle, MaxMSWait) == -1)
+                {
+                    throw new Win32Exception();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Apply a new default calling type to RPC for this process. The type specified must be initialized prior to changing the default.
+        /// </summary>
+        /// <param name="type"></param>
+        public void SetDefaultCallType(ExCallThreadType type)
+        {
+            if (!IsRPCTypeInitialized(type))
+                throw new InvalidOperationException($"Cannot invoke rpc of type {type} because the rpc type has not been initialized.");
+            DefaultRPCType = type;
+        }
+
+        /// <summary>
+        /// Determines if an RPC type has been initialized properly
+        /// </summary>
+        /// <param name="type"></param>
+        /// <returns></returns>
+        public bool IsRPCTypeInitialized(ExCallThreadType type)
+        {
+            switch(type)
+            {
+                case ExCallThreadType.XCTT_RIPHijack:
+                case ExCallThreadType.XCTT_NtCreateThreadEx:
+                    return true;
+
+                default:
+                    throw new NotImplementedException($"Calltype {type} not implemented");
+            }
+        }
+
+        /// <summary>
+        /// Find the active thread with the earliest creation time
+        /// </summary>
+        /// <returns></returns>
+        public ProcessThread GetEarliestActiveThread()
+        {
+            if (BaseProcess.HasExited) return null;
+            ProcessThread earliest = null;
+            foreach(ProcessThread thread in BaseProcess.Threads)
+            {
+                if (thread.ThreadState == Diagnostics.ThreadState.Terminated) continue;
+                if (thread.StartAddress.ToInt64() >= BaseAddress && thread.StartAddress.ToInt64() <= BaseProcess.MainModule.ModuleMemorySize + BaseAddress)
+                {
+                    if(earliest == null)
+                    {
+                        earliest = thread;
+                        continue;
+                    }
+                    if(thread.StartTime < earliest.StartTime)
+                    {
+                        earliest = thread;
+                    }
+                }
+            }
+            return earliest;
         }
         #endregion
 
@@ -351,6 +637,12 @@ namespace System
 
         #region Members
         public Process BaseProcess { get; private set; }
+
+        /// <summary>
+        /// The default code execution type for an RPC call with no thread type specifier
+        /// </summary>
+        public ExCallThreadType DefaultRPCType { get; private set; }
+
         public PointerEx BaseAddress
         { 
             get
@@ -380,9 +672,12 @@ namespace System
                 foreach (ProcessModule p in BaseProcess.Modules) yield return p;
             }
         }
+
         #endregion
     }
 
+    #region public Typedef
+    #region enum
     public enum ModuleLoadType
     { 
         MLT_ManualMapped
@@ -392,4 +687,56 @@ namespace System
     {
         MLO_None = 0
     }
+
+    public enum ExCallThreadType
+    {
+        /// <summary>
+        /// Start the call thread via NtCreateThreadEx (thread safe, default)
+        /// </summary>
+        XCTT_NtCreateThreadEx,
+
+        /// <summary>
+        /// Start a call via a thread hijacking procedure involving an RIP detour via the thread id specified (not thread safe)
+        /// </summary>
+        XCTT_RIPHijack,
+
+        /// <summary>
+        /// Start a call via a vectored exception (not thread safe)
+        /// </summary>
+        XCTT_VEH,
+
+        /// <summary>
+        /// Start a call via a VMT detour (not thread safe)
+        /// </summary>
+        XCTT_VMT_Detour,
+
+        /// <summary>
+        /// Start a call via a pointer replacement, typically in the data section
+        /// </summary>
+        XCTT_Custom_DS_Detour
+    }
+
+    #endregion
+    #region struct
+    [StructLayout(LayoutKind.Explicit, Size = 1152)]
+    public readonly struct Peb32
+    {
+        [FieldOffset(0xC)]
+        public readonly int Ldr;
+
+        [FieldOffset(0x38)]
+        public readonly int APISetMap;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 1992)]
+    public readonly struct Peb64
+    {
+        [FieldOffset(0x18)]
+        public readonly long Ldr;
+
+        [FieldOffset(0x68)]
+        public readonly long APISetMap;
+    }
+    #endregion
+    #endregion
 }

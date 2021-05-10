@@ -76,6 +76,7 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
     <LangVersion>7.3</LangVersion>
     <ErrorReport>prompt</ErrorReport>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Development|x64'">
     <DebugSymbols>true</DebugSymbols>
@@ -126,6 +127,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="EnvironmentEx.cs" />
+    <Compile Include="ExAssembler.cs" />
     <Compile Include="PEStructures\PEExportDirectory.cs" />
     <Compile Include="MemorySearcher.cs" />
     <Compile Include="PEStructures\PEDataDirectory.cs" />
@@ -140,6 +143,7 @@
     <Compile Include="ProcessEx.cs" />
     <Compile Include="ProcessModuleEx.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RPCStackFrame.cs" />
     <Compile Include="UtilExtensions.cs" />
   </ItemGroup>
   <ItemGroup>

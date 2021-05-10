@@ -40,9 +40,15 @@ namespace System
         {
             return IntPtr.Size == sizeof(int) ? ((int)px < (int)pxo) : ((long)px < (long)pxo);
         }
+
         public static bool operator >(PointerEx px, PointerEx pxo)
         {
             return IntPtr.Size == sizeof(int) ? ((int)px > (int)pxo) : ((long)px > (long)pxo);
+        }
+
+        public static PointerEx operator &(PointerEx px, PointerEx pxo)
+        {
+            return IntPtr.Size == sizeof(int) ? ((int)px & (int)pxo) : ((long)px & (long)pxo);
         }
 
         public static bool operator ==(PointerEx px, PointerEx pxo)
@@ -58,6 +64,16 @@ namespace System
         public static implicit operator bool(PointerEx px)
         {
             return px.IntPtr != IntPtr.Zero;
+        }
+
+        public static implicit operator byte(PointerEx px)
+        {
+            return (byte)px.IntPtr;
+        }
+
+        public static implicit operator sbyte(PointerEx px)
+        {
+            return (sbyte)px.IntPtr;
         }
 
         public static implicit operator int(PointerEx px)

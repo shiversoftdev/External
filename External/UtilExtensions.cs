@@ -25,6 +25,20 @@ namespace System
         }
 
         /// <summary>
+        /// Converts a byte array to a struct, but promises that the generic constraint is met by the programmer, instead of the compiler.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="data"></param>
+        /// <returns></returns>
+        internal static T ToStructUnsafe<T>(this byte[] data)
+        {
+            GCHandle handle = GCHandle.Alloc(data, GCHandleType.Pinned);
+            T val = (T)Marshal.PtrToStructure(handle.AddrOfPinnedObject(), typeof(T));
+            handle.Free();
+            return val;
+        }
+
+        /// <summary>
         /// Converts a struct to a byte array
         /// </summary>
         /// <typeparam name="T"></typeparam>
@@ -89,6 +103,45 @@ namespace System
         {
             c = char.ToLower(c);
             return (c >= 'a' && c <= 'f') || char.IsDigit(c);
+        }
+
+        public static string Hex(this byte[] arr)
+        {
+            return ByteArrayToHexViaLookup32Unsafe(arr);
+        }
+
+        // https://stackoverflow.com/questions/311165/how-do-you-convert-a-byte-array-to-a-hexadecimal-string-and-vice-versa/24343727#24343727
+        // insanity of performance nerds, but I love it
+        private static readonly uint[] _lookup32Unsafe = CreateLookup32Unsafe();
+        private static readonly unsafe uint* _lookup32UnsafeP = (uint*)GCHandle.Alloc(_lookup32Unsafe, GCHandleType.Pinned).AddrOfPinnedObject();
+        private static uint[] CreateLookup32Unsafe()
+        {
+            var result = new uint[256];
+            for (int i = 0; i < 256; i++)
+            {
+                string s = i.ToString("X2");
+                if (BitConverter.IsLittleEndian)
+                    result[i] = ((uint)s[0]) + ((uint)s[1] << 16);
+                else
+                    result[i] = ((uint)s[1]) + ((uint)s[0] << 16);
+            }
+            return result;
+        }
+
+        private unsafe static string ByteArrayToHexViaLookup32Unsafe(byte[] bytes)
+        {
+            var lookupP = _lookup32UnsafeP;
+            var result = new char[bytes.Length * 2];
+            fixed (byte* bytesP = bytes)
+            fixed (char* resultP = result)
+            {
+                uint* resultP2 = (uint*)resultP;
+                for (int i = 0; i < bytes.Length; i++)
+                {
+                    resultP2[i] = lookupP[bytesP[i]];
+                }
+            }
+            return new string(result);
         }
     }
 }

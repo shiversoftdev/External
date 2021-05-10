@@ -18,8 +18,8 @@ namespace System.PEStructures
 
             // Read the TLS directory
             long cbAddress;
-            if (is32bit) cbAddress = MemoryMarshal.Read<ImageTlsDirectory32>(ImageData.Span.Slice(DirectoryOffset)).AddressOfCallBacks;
-            else cbAddress = MemoryMarshal.Read<ImageTlsDirectory64>(ImageData.Span.Slice(DirectoryOffset)).AddressOfCallBacks;
+            if (is32bit) cbAddress = MemoryMarshal.Read<PEImageTlsDirectory32>(ImageData.Span.Slice(DirectoryOffset)).AddressOfCallBacks;
+            else cbAddress = MemoryMarshal.Read<PEImageTlsDirectory64>(ImageData.Span.Slice(DirectoryOffset)).AddressOfCallBacks;
 
             if (cbAddress == 0) yield break;
             var callbackIndex = 0;
@@ -36,14 +36,14 @@ namespace System.PEStructures
     }
 
     [StructLayout(LayoutKind.Explicit, Size = 24)]
-    public readonly struct ImageTlsDirectory32
+    public readonly struct PEImageTlsDirectory32
     {
         [FieldOffset(0xC)]
         public readonly int AddressOfCallBacks;
     }
 
     [StructLayout(LayoutKind.Explicit, Size = 40)]
-    internal readonly struct ImageTlsDirectory64
+    internal readonly struct PEImageTlsDirectory64
     {
         [FieldOffset(0x18)]
         public readonly long AddressOfCallBacks;

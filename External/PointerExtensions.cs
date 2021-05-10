@@ -29,5 +29,29 @@ namespace System
         {
             return i.IntPtr.Subtract(offset);
         }
+
+        public static PointerEx Align(this PointerEx value, uint alignment) => (value + (alignment - 1)) & ~(alignment - 1);
+
+        public static PointerEx ToPointer(this byte[] data)
+        {
+            if (IntPtr.Size < data.Length)
+            {
+                throw new InvalidCastException("Cannot cast data of length " + data.Length + " to a pointer of size " + IntPtr.Size);
+            }
+
+            if(data.Length < IntPtr.Size)
+            {
+                byte[] _data = new byte[IntPtr.Size];
+                data.CopyTo(_data, 0);
+                data = _data;
+            }
+
+            if (IntPtr.Size == sizeof(long))
+            {
+                return BitConverter.ToInt64(data, 0);
+            }
+
+            return BitConverter.ToInt32(data, 0);
+        }
     }
 }
