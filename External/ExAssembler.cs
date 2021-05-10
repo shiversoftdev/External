@@ -13,16 +13,16 @@ namespace System
         private const int ARG_R8 = 2;
         private const int ARG_R9 = 3;
 
-        public static byte[] CreateRemoteCall(PointerEx jumpLocation, PointerEx[] args, int pointerSize, PointerEx raxStorAddress, byte xmmMask_64 = 0, ExXMMReturnType xmmReturnType = ExXMMReturnType.XMMR_NONE)
+        public static byte[] CreateRemoteCall(PointerEx jumpLocation, PointerEx[] args, int pointerSize, PointerEx raxStorAddress, PointerEx threadStateAddress, byte xmmMask_64 = 0, ExXMMReturnType xmmReturnType = ExXMMReturnType.XMMR_NONE)
         {
             if(pointerSize == 8)
             {
-                return CreateRemoteCall64(jumpLocation, args, raxStorAddress, xmmMask_64, xmmReturnType);
+                return CreateRemoteCall64(jumpLocation, args, raxStorAddress, threadStateAddress, xmmMask_64, xmmReturnType);
             }
-            return CreateRemoteCall32(jumpLocation, args, raxStorAddress);
+            return CreateRemoteCall32(jumpLocation, args, raxStorAddress, threadStateAddress);
         }
 
-        private static byte[] CreateRemoteCall64(PointerEx jumpLocation, PointerEx[] args, PointerEx raxStorAddress, byte xmmMask, ExXMMReturnType xmmReturnType)
+        private static byte[] CreateRemoteCall64(PointerEx jumpLocation, PointerEx[] args, PointerEx raxStorAddress, PointerEx threadStateAddress, byte xmmMask, ExXMMReturnType xmmReturnType)
         {
             List<byte> data = new List<byte>();
 
@@ -199,7 +199,15 @@ namespace System
                 }
             }
 
-            // xor eax, eax
+            // mov rax, threadStateAddress
+            data.AddRange(new byte[] { 0x48, 0xB8 });
+            data.AddRange(BitConverter.GetBytes((long)threadStateAddress));
+
+            // change thread state to finished
+            // mov QWORD PTR [rax], 0x1
+            data.AddRange(new byte[] { 0x48, 0xC7, 0x00, 0x01, 0x00, 0x00, 0x00 });
+
+            // xor rax, rax
             data.AddRange(new byte[] { 0x31, 0xC0 });
 
             // add rsp, 0x28
@@ -210,7 +218,7 @@ namespace System
             return data.ToArray();
         }
 
-        private static byte[] CreateRemoteCall32(PointerEx jumpLocation, PointerEx[] args, PointerEx eaxStorAddress)
+        private static byte[] CreateRemoteCall32(PointerEx jumpLocation, PointerEx[] args, PointerEx eaxStorAddress, PointerEx threadStateAddress)
         {
             List<byte> data = new List<byte>();
 
@@ -243,8 +251,105 @@ namespace System
                 data.AddRange(BitConverter.GetBytes((int)eaxStorAddress));
             }
 
+            // mov eax, threadStateAddress
+            data.Add(0xB8);
+            data.AddRange(BitConverter.GetBytes((int)threadStateAddress));
+
+            // change thread state to finished
+            // mov DWORD PTR [eax], 0x1
+            data.AddRange(new byte[] { 0xC7, 0x00, 0x01, 0x00, 0x00, 0x00 });
+
             // xor eax, eax
             data.AddRange(new byte[] { 0x33, 0xC0 });
+
+            // ret
+            data.Add(0xC3);
+            return data.ToArray();
+        }
+
+        internal static byte[] CreateThreadIntercept32(PointerEx jumpTo, PointerEx originalIP)
+        {
+            List<byte> data = new List<byte>();
+
+            // pusha
+            data.Add(0x60);
+
+            // pushf
+            data.Add(0x9c);
+
+            // mov eax, jumpTo
+            data.Add(0xb8);
+            data.AddRange(BitConverter.GetBytes((int)jumpTo));
+
+            // call eax
+            data.AddRange(new byte[] { 0xff, 0xd0 });
+
+            // popf
+            data.Add(0x9d);
+
+            // popa
+            data.Add(0x61);
+
+            // push originalIP
+            data.Add(0x68);
+            data.AddRange(BitConverter.GetBytes((int)originalIP));
+
+            // ret
+            data.Add(0xC3);
+            return data.ToArray();
+        }
+
+        internal static byte[] CreateThreadIntercept64(PointerEx jumpTo, PointerEx originalIP, PointerEx xmmSpace)
+        {
+            List<byte> data = new List<byte>();
+
+            // sub rsp, 0x8
+            data.AddRange(new byte[] { 0x48, 0x83, 0xEC, 0x08 });
+
+            // mov DWORD PTR [rsp], originalIP_l
+            data.AddRange(new byte[] { 0xC7, 0x04, 0x24 });
+            data.AddRange(BitConverter.GetBytes((int)originalIP));
+
+            // mov DWORD PTR [rsp+0x4], originalIP_h
+            data.AddRange(new byte[] { 0xC7, 0x44, 0x24, 0x04 });
+            data.AddRange(BitConverter.GetBytes((int)((long)originalIP >> 32)));
+
+            // push all the standard registers
+            data.AddRange(new byte[] { 0x9C, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x41, 0x50, 0x41, 0x51, 0x41, 0x52, 0x41, 0x53, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57 });
+
+            // mov rax, xmmSpace
+            data.AddRange(new byte[] { 0x48, 0xB8 });
+            data.AddRange(BitConverter.GetBytes((long)xmmSpace));
+
+            // save all the xmm registers to xmmSpace
+            data.AddRange(new byte[] { 0x66, 0x0F, 0x29, 0x00, 0x66, 0x0F, 0x29, 0x48, 0x10, 0x66, 0x0F, 0x29, 0x50, 0x20, 0x66, 0x0F, 0x29, 0x58, 0x30,
+                                       0x66, 0x0F, 0x29, 0x60, 0x40, 0x66, 0x0F, 0x29, 0x68, 0x50, 0x66, 0x0F, 0x29, 0x70, 0x60, 0x66, 0x0F, 0x29, 0x78,
+                                       0x70, 0x66, 0x44, 0x0F, 0x29, 0x80, 0x80, 0x00, 0x00, 0x00, 0x66, 0x44, 0x0F, 0x29, 0x88, 0x90, 0x00, 0x00, 0x00,
+                                       0x66, 0x44, 0x0F, 0x29, 0x90, 0xA0, 0x00, 0x00, 0x00, 0x66, 0x44, 0x0F, 0x29, 0x98, 0xB0, 0x00, 0x00, 0x00, 0x66,
+                                       0x44, 0x0F, 0x29, 0xA0, 0xC0, 0x00, 0x00, 0x00, 0x66, 0x44, 0x0F, 0x29, 0xA8, 0xD0, 0x00, 0x00, 0x00, 0x66, 0x44,
+                                       0x0F, 0x29, 0xB0, 0xE0, 0x00, 0x00, 0x00, 0x66, 0x44, 0x0F, 0x29, 0xB8, 0xF0, 0x00, 0x00, 0x00 });
+
+            // mov rax, jumpTo
+            data.AddRange(new byte[] { 0x48, 0xB8 });
+            data.AddRange(BitConverter.GetBytes((long)jumpTo));
+
+            // call rax
+            data.AddRange(new byte[] { 0xFF, 0xD0 });
+
+            // mov rax, xmmSpace
+            data.AddRange(new byte[] { 0x48, 0xB8 });
+            data.AddRange(BitConverter.GetBytes((long)xmmSpace));
+
+            // load all the xmm registers from xmmSpace
+            data.AddRange(new byte[] { 0x66, 0x0F, 0x28, 0x00, 0x66, 0x0F, 0x28, 0x48, 0x10, 0x66, 0x0F, 0x28, 0x50, 0x20, 0x66, 0x0F, 0x28, 0x58, 0x30,
+                                       0x66, 0x0F, 0x28, 0x60, 0x40, 0x66, 0x0F, 0x28, 0x68, 0x50, 0x66, 0x0F, 0x28, 0x70, 0x60, 0x66, 0x0F, 0x28, 0x78,
+                                       0x70, 0x66, 0x44, 0x0F, 0x28, 0x80, 0x80, 0x00, 0x00, 0x00, 0x66, 0x44, 0x0F, 0x28, 0x88, 0x90, 0x00, 0x00, 0x00,
+                                       0x66, 0x44, 0x0F, 0x28, 0x90, 0xA0, 0x00, 0x00, 0x00, 0x66, 0x44, 0x0F, 0x28, 0x98, 0xB0, 0x00, 0x00, 0x00, 0x66,
+                                       0x44, 0x0F, 0x28, 0xA0, 0xC0, 0x00, 0x00, 0x00, 0x66, 0x44, 0x0F, 0x28, 0xA8, 0xD0, 0x00, 0x00, 0x00, 0x66, 0x44,
+                                       0x0F, 0x28, 0xB0, 0xE0, 0x00, 0x00, 0x00, 0x66, 0x44, 0x0F, 0x28, 0xB8, 0xF0, 0x00, 0x00, 0x00 });
+
+            // pop all the standard registers
+            data.AddRange(new byte[] { 0x41, 0x5F, 0x41, 0x5E, 0x41, 0x5D, 0x41, 0x5C, 0x41, 0x5B, 0x41, 0x5A, 0x41, 0x59, 0x41, 0x58, 0x5F, 0x5E, 0x5D, 0x5C, 0x5B, 0x5A, 0x59, 0x58, 0x9D });
 
             // ret
             data.Add(0xC3);

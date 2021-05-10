@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using static ExternalTestingUtility.Cheats.BlackOps3.Constants;
+using static System.ExCallThreadType;
 
 namespace ExternalTestingUtility.Cheats
 {
@@ -39,7 +40,7 @@ namespace ExternalTestingUtility.Cheats
         public static void Cbuf_AddText(string serverText, int client = 0)
         {
             if (serverText == null) return;
-            Game.Call<ulong>(Game[OFF_CBUF_ADDTEXT], client, serverText, 0L);
+            var result = Game.Call<ulong>(Game[OFF_CBUF_ADDTEXT], XCTT_RIPHijack, client, serverText, 0L).Result;
         }
     }
 }

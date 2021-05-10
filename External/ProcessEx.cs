@@ -144,6 +144,34 @@ namespace System
 
         [DllImport("kernel32.dll")]
         internal static extern PointerEx CreateRemoteThread(PointerEx hProcess, PointerEx lpThreadAttributes, uint dwStackSize, PointerEx lpStartAddress, PointerEx lpParameter, uint dwCreationFlags, out PointerEx lpThreadId);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern PointerEx OpenThread(int dwDesiredAccess, bool bInheritHandle, int dwThreadId);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern PointerEx SuspendThread(PointerEx hThread);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool Wow64GetThreadContext(PointerEx hThread, ref CONTEXT lpContext);
+
+        // Get context of thread x64, in x64 application
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool GetThreadContext(PointerEx hThread, ref CONTEXT64 lpContext);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool GetThreadContext(PointerEx hThread, ref CONTEXT lpContext);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool Wow64SetThreadContext(PointerEx hThread, CONTEXT lpContext);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool SetThreadContext(PointerEx hThread, CONTEXT lpContext);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool SetThreadContext(PointerEx hThread, CONTEXT64 lpContext);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern uint ResumeThread(PointerEx hThread);
         #endregion
 
         #region methods
@@ -391,7 +419,7 @@ namespace System
                 }
 
                 // Write shellcode
-                byte[] shellcode = ExAssembler.CreateRemoteCall(absoluteAddress, ArgumentList, PointerSize(), raxStorAddress, xmmArgMask, xmmRetType);
+                byte[] shellcode = ExAssembler.CreateRemoteCall(absoluteAddress, ArgumentList, PointerSize(), raxStorAddress, threadStateAddress, xmmArgMask, xmmRetType);
                 PointerEx shellSize = shellcode.Length;
                 PointerEx hShellcode = QuickAlloc(shellSize, true);
 
@@ -403,7 +431,7 @@ namespace System
                     System.IO.File.AppendAllText("log.txt", $"hShellcode: 0x{hShellcode:X}, hStack: 0x{hStack:X}\n");
                     System.IO.File.AppendAllText("log.txt", $"shellcode: {shellcode.Hex()}\n");
                     System.IO.File.AppendAllText("log.txt", $"stack: {stackData.Hex()}\n");
-                    Environment.Exit(0);
+                    //Environment.Exit(0);
 #endif
 
                     switch(callType)
@@ -481,7 +509,7 @@ namespace System
 
         // TODO: CallRef
 
-        private async Task CallRipHijack(PointerEx shellcode, PointerEx threadStateAddress)
+        private async Task CallRipHijack(PointerEx hShellcode, PointerEx threadStateAddress)
         {
             var targetThread = GetEarliestActiveThread();
             if(targetThread == null)
@@ -489,6 +517,133 @@ namespace System
                 throw new Exception("Unable to find a thread which can be hijacked.");
             }
 
+#if DEV
+            System.IO.File.AppendAllText("log.txt", $"targetThreadID: {targetThread.Id}\n");
+#endif
+
+            var hThreadResume = QuickAlloc(4096, true);
+            var hXmmSpace = QuickAlloc(256 * 2, true);
+            try
+            {
+                if (!__hijackMutexTable.ContainsKey(BaseProcess.Id))
+                {
+                    __hijackMutexTable[BaseProcess.Id] = new object();
+                }
+
+                lock (__hijackMutexTable[BaseProcess.Id])
+                {
+                    PointerEx hThread = OpenThread((int)ThreadAccess.THREAD_HIJACK, false, targetThread.Id);
+
+                    if (!hThread)
+                    {
+                        throw new Exception("Unable to open target thread for RPC...");
+                    }
+
+#if DEV
+                    System.IO.File.AppendAllText("log.txt", $"hThread: {hThread}\n");
+#endif
+
+                    SuspendThread(hThread);
+
+                    if(GetArchitecture() == Architecture.X86)
+                    {
+                        CONTEXT _32_context = new CONTEXT();
+                        _32_context.ContextFlags = (uint)CONTEXT_FLAGS.CONTEXT_FULL;
+                        bool wow64CtxGetResult;
+
+                        if(Environment.Is64BitProcess)
+                        {
+                            wow64CtxGetResult = Wow64GetThreadContext(hThread, ref _32_context);
+                        }
+                        else
+                        {
+                            wow64CtxGetResult = GetThreadContext(hThread, ref _32_context);
+                        }
+
+                        if(!wow64CtxGetResult)
+                        {
+                            throw new Exception("Unable to get a thread context for the target process RPC.");
+                        }
+
+                        HijackRipInternal32(hThread, hShellcode, hThreadResume, ref _32_context);
+
+                        if (Environment.Is64BitProcess)
+                        {
+                            Wow64SetThreadContext(hThread, _32_context);
+                        }
+                        else
+                        {
+                            SetThreadContext(hThread, _32_context);
+                        }
+                    }
+                    else
+                    {
+                        CONTEXT64 _64_context = new CONTEXT64();
+                        _64_context.ContextFlags = CONTEXT_FLAGS.CONTEXT_FULL;
+
+                        if (!GetThreadContext(hThread, ref _64_context))
+                        {
+                            throw new Win32Exception(Marshal.GetLastWin32Error());
+                            throw new Exception("Unable to get a thread context for the target process RPC.");
+                        }
+
+#if DEV
+                        System.IO.File.AppendAllText("log.txt", $"context obtained\n");
+#endif
+
+                        HijackRipInternal64(hThread, hShellcode, hThreadResume, hXmmSpace, ref _64_context);
+                        SetThreadContext(hThread, _64_context);
+                    }
+
+                    ResumeThread(hThread);
+                    CloseHandle(hThread);
+                }
+
+#if DEV
+                System.IO.File.AppendAllText("log.txt", $"awaiting thread exit...\n");
+#endif
+                // await thread exit status
+                while (Handle)
+                {
+                    if (GetValue<int>(threadStateAddress) != 0)
+                    {
+                        break;
+                    }
+                    await Task.Delay(1);
+                }
+
+#if DEV
+                System.IO.File.AppendAllText("log.txt", $"good to go!\n");
+#endif
+            }
+            finally
+            {
+                if(Handle)
+                {
+                    VirtualFreeEx(Handle, hThreadResume, 4096, (int)FreeType.Release);
+                    VirtualFreeEx(Handle, hXmmSpace, 256 * 2, (int)FreeType.Release);
+                }
+            }
+            
+        }
+
+        private void HijackRipInternal64(PointerEx hThread, PointerEx hShellcode, PointerEx hIntercept, PointerEx hXmmSpace, ref CONTEXT64 threadContext)
+        {
+            PointerEx originalIp = threadContext.Rip;
+            byte[] data = ExAssembler.CreateThreadIntercept64(hShellcode, originalIp, hXmmSpace);
+            SetBytes(hIntercept, data);
+#if DEV
+            System.IO.File.AppendAllText("log.txt", $"ripIntercept: {data.Hex()}\n");
+#endif
+            threadContext.Rip = hIntercept;
+        }
+
+        private void HijackRipInternal32(PointerEx hThread, PointerEx hShellcode, PointerEx hIntercept, ref CONTEXT threadContext)
+        {
+            PointerEx originalIp = threadContext.Eip;
+            byte[] data = ExAssembler.CreateThreadIntercept32(hShellcode, originalIp);
+            SetBytes(hIntercept, data);
+            threadContext.Eip = hIntercept;
         }
 
         /// <summary>
@@ -576,17 +731,14 @@ namespace System
             foreach(ProcessThread thread in BaseProcess.Threads)
             {
                 if (thread.ThreadState == Diagnostics.ThreadState.Terminated) continue;
-                if (thread.StartAddress.ToInt64() >= BaseAddress && thread.StartAddress.ToInt64() <= BaseProcess.MainModule.ModuleMemorySize + BaseAddress)
+                if (earliest == null)
                 {
-                    if(earliest == null)
-                    {
-                        earliest = thread;
-                        continue;
-                    }
-                    if(thread.StartTime < earliest.StartTime)
-                    {
-                        earliest = thread;
-                    }
+                    earliest = thread;
+                    continue;
+                }
+                if (thread.StartTime < earliest.StartTime)
+                {
+                    earliest = thread;
                 }
             }
             return earliest;
@@ -674,6 +826,10 @@ namespace System
         }
 
         #endregion
+
+        #region static members
+        private static Dictionary<int, object> __hijackMutexTable = new Dictionary<int, object>();
+        #endregion
     }
 
     #region public Typedef
@@ -736,6 +892,191 @@ namespace System
 
         [FieldOffset(0x68)]
         public readonly long APISetMap;
+    }
+
+    // x86 float save
+    [StructLayout(LayoutKind.Sequential)]
+    public struct FLOATING_SAVE_AREA
+    {
+        public uint ControlWord;
+        public uint StatusWord;
+        public uint TagWord;
+        public uint ErrorOffset;
+        public uint ErrorSelector;
+        public uint DataOffset;
+        public uint DataSelector;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 80)]
+        public byte[] RegisterArea;
+        public uint Cr0NpxState;
+    }
+
+    // x86 context structure (not used in this example)
+    [StructLayout(LayoutKind.Sequential)]
+    public struct CONTEXT
+    {
+        public uint ContextFlags; //set this to an appropriate value 
+                                  // Retrieved by CONTEXT_DEBUG_REGISTERS 
+        public uint Dr0;
+        public uint Dr1;
+        public uint Dr2;
+        public uint Dr3;
+        public uint Dr6;
+        public uint Dr7;
+        // Retrieved by CONTEXT_FLOATING_POINT 
+        public FLOATING_SAVE_AREA FloatSave;
+        // Retrieved by CONTEXT_SEGMENTS 
+        public uint SegGs;
+        public uint SegFs;
+        public uint SegEs;
+        public uint SegDs;
+        // Retrieved by CONTEXT_INTEGER 
+        public uint Edi;
+        public uint Esi;
+        public uint Ebx;
+        public uint Edx;
+        public uint Ecx;
+        public uint Eax;
+        // Retrieved by CONTEXT_CONTROL 
+        public uint Ebp;
+        public uint Eip;
+        public uint SegCs;
+        public uint EFlags;
+        public uint Esp;
+        public uint SegSs;
+        // Retrieved by CONTEXT_EXTENDED_REGISTERS 
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 512)]
+        public byte[] ExtendedRegisters;
+    }
+
+    // x64 m128a
+    [StructLayout(LayoutKind.Sequential)]
+    public struct M128A
+    {
+        public ulong High;
+        public long Low;
+
+        public override string ToString()
+        {
+            return string.Format("High:{0}, Low:{1}", this.High, this.Low);
+        }
+    }
+
+    // x64 save format
+    [StructLayout(LayoutKind.Sequential, Pack = 16)]
+    public struct XSAVE_FORMAT64
+    {
+        public ushort ControlWord;
+        public ushort StatusWord;
+        public byte TagWord;
+        public byte Reserved1;
+        public ushort ErrorOpcode;
+        public uint ErrorOffset;
+        public ushort ErrorSelector;
+        public ushort Reserved2;
+        public uint DataOffset;
+        public ushort DataSelector;
+        public ushort Reserved3;
+        public uint MxCsr;
+        public uint MxCsr_Mask;
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
+        public M128A[] FloatRegisters;
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
+        public M128A[] XmmRegisters;
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 96)]
+        public byte[] Reserved4;
+    }
+
+
+    public enum CONTEXT_FLAGS : uint
+    {
+        CONTEXT_i386 = 0x10000,
+        CONTEXT_i486 = 0x10000,   //  same as i386
+        CONTEXT_CONTROL = CONTEXT_i386 | 0x01, // SS:SP, CS:IP, FLAGS, BP
+        CONTEXT_INTEGER = CONTEXT_i386 | 0x02, // AX, BX, CX, DX, SI, DI
+        CONTEXT_SEGMENTS = CONTEXT_i386 | 0x04, // DS, ES, FS, GS
+        CONTEXT_FLOATING_POINT = CONTEXT_i386 | 0x08, // 387 state
+        CONTEXT_DEBUG_REGISTERS = CONTEXT_i386 | 0x10, // DB 0-3,6,7
+        CONTEXT_EXTENDED_REGISTERS = CONTEXT_i386 | 0x20, // cpu specific extensions
+        CONTEXT_FULL = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS,
+        CONTEXT_ALL = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS | CONTEXT_FLOATING_POINT | CONTEXT_DEBUG_REGISTERS | CONTEXT_EXTENDED_REGISTERS
+    }
+
+    // x64 context structure
+    [StructLayout(LayoutKind.Sequential, Pack = 16)]
+    public struct CONTEXT64
+    {
+        public ulong P1Home;
+        public ulong P2Home;
+        public ulong P3Home;
+        public ulong P4Home;
+        public ulong P5Home;
+        public ulong P6Home;
+
+        public CONTEXT_FLAGS ContextFlags;
+        public uint MxCsr;
+
+        public ushort SegCs;
+        public ushort SegDs;
+        public ushort SegEs;
+        public ushort SegFs;
+        public ushort SegGs;
+        public ushort SegSs;
+        public uint EFlags;
+
+        public ulong Dr0;
+        public ulong Dr1;
+        public ulong Dr2;
+        public ulong Dr3;
+        public ulong Dr6;
+        public ulong Dr7;
+
+        public ulong Rax;
+        public ulong Rcx;
+        public ulong Rdx;
+        public ulong Rbx;
+        public ulong Rsp;
+        public ulong Rbp;
+        public ulong Rsi;
+        public ulong Rdi;
+        public ulong R8;
+        public ulong R9;
+        public ulong R10;
+        public ulong R11;
+        public ulong R12;
+        public ulong R13;
+        public ulong R14;
+        public ulong R15;
+        public ulong Rip;
+
+        public XSAVE_FORMAT64 DUMMYUNIONNAME;
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 26)]
+        public M128A[] VectorRegister;
+        public ulong VectorControl;
+
+        public ulong DebugControl;
+        public ulong LastBranchToRip;
+        public ulong LastBranchFromRip;
+        public ulong LastExceptionToRip;
+        public ulong LastExceptionFromRip;
+    }
+
+    public enum ThreadAccess : int
+    {
+        TERMINATE = (0x0001),
+        SUSPEND_RESUME = (0x0002),
+        GET_CONTEXT = (0x0008),
+        SET_CONTEXT = (0x0010),
+        SET_INFORMATION = (0x0020),
+        QUERY_INFORMATION = (0x0040),
+        SET_THREAD_TOKEN = (0x0080),
+        IMPERSONATE = (0x0100),
+        DIRECT_IMPERSONATION = (0x0200),
+        THREAD_HIJACK = SUSPEND_RESUME | GET_CONTEXT | SET_CONTEXT,
+        THREAD_ALL = TERMINATE | SUSPEND_RESUME | GET_CONTEXT | SET_CONTEXT | SET_INFORMATION | QUERY_INFORMATION | SET_THREAD_TOKEN | IMPERSONATE | DIRECT_IMPERSONATION
     }
     #endregion
     #endregion

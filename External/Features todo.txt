@@ -14,3 +14,4 @@ proc.MapFunction
 Testing TODO:
 
 	float/double RPC
+	32 bit thread hijacking

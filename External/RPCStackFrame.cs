@@ -13,7 +13,7 @@ namespace System
         private const int ReturnSize = 16;
         public readonly int ThreadStateOffset;
 
-        public int InternalDataOffsetEnd => ThreadStateOffset + PointerSize;
+        public int InternalDataOffsetEnd => ThreadStateOffset + sizeof(int);
 
         private List<RPCArgument> Arguments;
         private readonly int PointerSize;
