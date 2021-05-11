@@ -25,6 +25,20 @@ namespace System
         }
 
         /// <summary>
+        /// Converts a byte array to a struct
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="data"></param>
+        /// <returns></returns>
+        public static object ToStruct(this byte[] data, Type t)
+        {
+            GCHandle handle = GCHandle.Alloc(data, GCHandleType.Pinned);
+            object val = Marshal.PtrToStructure(handle.AddrOfPinnedObject(), t);
+            handle.Free();
+            return val;
+        }
+
+        /// <summary>
         /// Converts a byte array to a struct, but promises that the generic constraint is met by the programmer, instead of the compiler.
         /// </summary>
         /// <typeparam name="T"></typeparam>

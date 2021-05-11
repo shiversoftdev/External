@@ -15,3 +15,8 @@ Testing TODO:
 
 	float/double RPC
 	32 bit thread hijacking
+
+
+Bug Fixes TODO:
+	
+	Process wait monitor for a closed process does not correctly work.

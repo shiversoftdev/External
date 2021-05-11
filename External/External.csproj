@@ -145,12 +145,17 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RPCStackFrame.cs" />
     <Compile Include="UtilExtensions.cs" />
+    <Compile Include="ExThreads\ThreadContext32Ex.cs" />
+    <Compile Include="ExThreads\ThreadContext64Ex.cs" />
+    <Compile Include="ExThreads\ThreadContextEx.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Features todo.txt" />
+    <None Include="Reference\x64hijackasm.txt" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

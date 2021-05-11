@@ -30,7 +30,10 @@ namespace ExternalTestingUtility
         private void InitializeComponent()
         {
             this.InnerForm = new Refract.UI.Core.Controls.CBorderedForm();
+            this.RPCExample3 = new System.Windows.Forms.Button();
+            this.RPCExample2 = new System.Windows.Forms.Button();
             this.RPCTest1 = new System.Windows.Forms.Button();
+            this.ExampleRPC4 = new System.Windows.Forms.Button();
             this.InnerForm.ControlContents.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -40,6 +43,9 @@ namespace ExternalTestingUtility
             // 
             // InnerForm.ControlContents
             // 
+            this.InnerForm.ControlContents.Controls.Add(this.ExampleRPC4);
+            this.InnerForm.ControlContents.Controls.Add(this.RPCExample3);
+            this.InnerForm.ControlContents.Controls.Add(this.RPCExample2);
             this.InnerForm.ControlContents.Controls.Add(this.RPCTest1);
             this.InnerForm.ControlContents.Dock = System.Windows.Forms.DockStyle.Fill;
             this.InnerForm.ControlContents.Enabled = true;
@@ -56,15 +62,49 @@ namespace ExternalTestingUtility
             this.InnerForm.TitleBarTitle = "External Cheat Example";
             this.InnerForm.UseTitleBar = true;
             // 
+            // RPCExample3
+            // 
+            this.RPCExample3.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.RPCExample3.Location = new System.Drawing.Point(180, 8);
+            this.RPCExample3.Name = "RPCExample3";
+            this.RPCExample3.Size = new System.Drawing.Size(80, 30);
+            this.RPCExample3.TabIndex = 2;
+            this.RPCExample3.Text = "Start Game";
+            this.RPCExample3.UseVisualStyleBackColor = true;
+            this.RPCExample3.Click += new System.EventHandler(this.RPCExample3_Click);
+            // 
+            // RPCExample2
+            // 
+            this.RPCExample2.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.RPCExample2.Location = new System.Drawing.Point(94, 8);
+            this.RPCExample2.Name = "RPCExample2";
+            this.RPCExample2.Size = new System.Drawing.Size(80, 30);
+            this.RPCExample2.TabIndex = 1;
+            this.RPCExample2.Text = "Host Dvars";
+            this.RPCExample2.UseVisualStyleBackColor = true;
+            this.RPCExample2.Click += new System.EventHandler(this.RPCExample2_Click);
+            // 
             // RPCTest1
             // 
+            this.RPCTest1.Cursor = System.Windows.Forms.Cursors.Hand;
             this.RPCTest1.Location = new System.Drawing.Point(8, 8);
             this.RPCTest1.Name = "RPCTest1";
-            this.RPCTest1.Size = new System.Drawing.Size(64, 64);
+            this.RPCTest1.Size = new System.Drawing.Size(80, 30);
             this.RPCTest1.TabIndex = 0;
-            this.RPCTest1.Text = "Test 1";
+            this.RPCTest1.Text = "Disconnect";
             this.RPCTest1.UseVisualStyleBackColor = true;
             this.RPCTest1.Click += new System.EventHandler(this.RPCTest1_Click);
+            // 
+            // ExampleRPC4
+            // 
+            this.ExampleRPC4.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.ExampleRPC4.Location = new System.Drawing.Point(8, 44);
+            this.ExampleRPC4.Name = "ExampleRPC4";
+            this.ExampleRPC4.Size = new System.Drawing.Size(80, 30);
+            this.ExampleRPC4.TabIndex = 3;
+            this.ExampleRPC4.Text = "MP Classes";
+            this.ExampleRPC4.UseVisualStyleBackColor = true;
+            this.ExampleRPC4.Click += new System.EventHandler(this.ExampleRPC4_Click);
             // 
             // MainForm
             // 
@@ -84,6 +124,9 @@ namespace ExternalTestingUtility
 
         private Refract.UI.Core.Controls.CBorderedForm InnerForm;
         private System.Windows.Forms.Button RPCTest1;
+        private System.Windows.Forms.Button RPCExample2;
+        private System.Windows.Forms.Button RPCExample3;
+        private System.Windows.Forms.Button ExampleRPC4;
     }
 }
 

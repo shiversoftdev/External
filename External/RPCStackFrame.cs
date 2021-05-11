@@ -13,6 +13,26 @@ namespace System
         private const int ReturnSize = 16;
         public readonly int ThreadStateOffset;
 
+        /// <summary>
+        /// All types that will be allowed to pass by value
+        /// </summary>
+        private static readonly Type[] AllowedByValue = new Type[]
+        {
+            typeof(byte),
+            typeof(sbyte),
+            typeof(bool),
+            typeof(char),
+            typeof(short),
+            typeof(ushort),
+            typeof(int),
+            typeof(uint),
+            typeof(long),
+            typeof(ulong),
+            typeof(PointerEx),
+            typeof(IntPtr),
+            typeof(UIntPtr)
+        };
+
         public int InternalDataOffsetEnd => ThreadStateOffset + sizeof(int);
 
         private List<RPCArgument> Arguments;
@@ -61,10 +81,17 @@ namespace System
                 return;
             }
 
+            if(obj.GetType().IsEnum)
+            {
+                Arguments.Add(new RPCArgument(UtilExtensions.ToByteArray(Convert.ToInt64(obj)), false));
+                return;
+            }
+   
             if (obj.GetType().IsValueType)
             {
                 var _data = UtilExtensions.ToByteArray(obj);
-                if(_data.Length <= PointerSize)
+
+                if(IsByValue(obj.GetType()))
                 {
                     Arguments.Add(new RPCArgument(_data, false));
                 }
@@ -133,6 +160,18 @@ namespace System
         {
             var arg = Arguments[index];
             return arg.IsXMM64;
+        }
+
+        public bool IsArgByRef(int index, bool AllowXMM = false)
+        {
+            var arg = Arguments[index];
+            if ((arg.IsXMM || arg.IsXMM64) && !AllowXMM) return false;
+            return arg.IsReferenceType;
+        }
+
+        public static bool IsByValue(Type t)
+        {
+            return AllowedByValue.Contains(t);
         }
 
         public static bool CanSerializeType(Type t)

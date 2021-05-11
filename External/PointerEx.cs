@@ -78,12 +78,12 @@ namespace System
 
         public static implicit operator int(PointerEx px)
         {
-            return px.IntPtr.ToInt32();
+            return (int)px.IntPtr.ToInt64();
         }
 
         public static implicit operator uint(PointerEx px)
         {
-            return (uint)px.IntPtr.ToInt32();
+            return (uint)px.IntPtr.ToInt64();
         }
 
         public static implicit operator long(PointerEx px)

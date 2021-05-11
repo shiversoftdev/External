@@ -15,6 +15,7 @@ using static System.ModuleLoadType;
 using static System.ExXMMReturnType;
 using System.Threading;
 using System.Runtime.CompilerServices;
+using System.ExThreads;
 
 namespace System
 {
@@ -144,37 +145,11 @@ namespace System
 
         [DllImport("kernel32.dll")]
         internal static extern PointerEx CreateRemoteThread(PointerEx hProcess, PointerEx lpThreadAttributes, uint dwStackSize, PointerEx lpStartAddress, PointerEx lpParameter, uint dwCreationFlags, out PointerEx lpThreadId);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern PointerEx OpenThread(int dwDesiredAccess, bool bInheritHandle, int dwThreadId);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern PointerEx SuspendThread(PointerEx hThread);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool Wow64GetThreadContext(PointerEx hThread, ref CONTEXT lpContext);
-
-        // Get context of thread x64, in x64 application
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool GetThreadContext(PointerEx hThread, ref CONTEXT64 lpContext);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool GetThreadContext(PointerEx hThread, ref CONTEXT lpContext);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool Wow64SetThreadContext(PointerEx hThread, CONTEXT lpContext);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool SetThreadContext(PointerEx hThread, CONTEXT lpContext);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool SetThreadContext(PointerEx hThread, CONTEXT64 lpContext);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern uint ResumeThread(PointerEx hThread);
         #endregion
 
         #region methods
+        private Timer ProcInfoTimer;
+        private EventHandler ProcInfoUpdate;
         public ProcessEx(Process p, bool openHandle = false) 
         {
             if (p == null) throw new ArgumentException("Target process cannot be null");
@@ -183,6 +158,22 @@ namespace System
             p.EnableRaisingEvents = true;
             p.Exited += P_Exited;
             if(openHandle) OpenHandle();
+            ProcInfoTimer = new Timer(PInfoTick, null, 0, 1000);
+            ProcInfoUpdate += PInfoUpdate;
+        }
+
+        private void PInfoTick(object state)
+        {
+            ProcInfoUpdate?.Invoke(null, null);
+        }
+
+        private void PInfoUpdate(object sender, EventArgs e)
+        {
+            BaseProcess.Refresh();
+            if(BaseProcess.HasExited)
+            {
+                ProcInfoTimer.Change(Timeout.Infinite, Timeout.Infinite);
+            }
         }
 
         private void P_Exited(object sender, EventArgs e) 
@@ -354,9 +345,9 @@ namespace System
         /// <param name="absoluteAddress"></param>
         /// <param name="args"></param>
         /// <returns></returns>
-        public Task<T> Call<T>(PointerEx absoluteAddress, params object[] args)
+        public T Call<T>(PointerEx absoluteAddress, params object[] args)
         {
-            return Call<T>(absoluteAddress, DefaultRPCType, args);
+            return __CallAsync<T>(absoluteAddress, DefaultRPCType, null, args).Result;
         }
 
         /// <summary>
@@ -366,7 +357,80 @@ namespace System
         /// <param name="callType">Type of call to initiate. Some call types must be initialized to be used.</param>
         /// <param name="args"></param>
         /// <returns></returns>
-        public async Task<T> Call<T>(PointerEx absoluteAddress, ExCallThreadType callType, params object[] args)
+        public T Call<T>(PointerEx absoluteAddress, ExCallThreadType callType, params object[] args)
+        {
+            return __CallAsync<T>(absoluteAddress, callType, null, args).Result;
+        }
+
+        /// <summary>
+        /// Call a remote procedure, with a return type. Arguments are passed by array reference, and the modified array will be the resultant params from proc. Structs are shallow copy. Will await return signal.
+        /// </summary>
+        /// <param name="absoluteAddress"></param>
+        /// <param name="args"></param>
+        /// <returns></returns>
+        public T CallRef<T>(PointerEx absoluteAddress, ref object[] args)
+        {
+            return CallRef<T>(absoluteAddress, DefaultRPCType, ref args);
+        }
+
+        /// <summary>
+        /// Call a remote procedure, with a return type. Arguments are passed by array reference, and the modified array will be the resultant params from proc. Structs are shallow copy. Will await return signal.
+        /// </summary>
+        /// <param name="absoluteAddress"></param>
+        /// <param name="callType">Type of call to initiate. Some call types must be initialized to be used.</param>
+        /// <param name="args"></param>
+        /// <returns></returns>
+        public T CallRef<T>(PointerEx absoluteAddress, ExCallThreadType callType, ref object[] args)
+        {
+            if(args == null)
+            {
+                args = new object[0];
+            }
+            RPCParams rpcData = new RPCParams();
+            rpcData.ParamData = new object[args.Length];
+            if(args.Length > 0)
+            {
+                args.CopyTo(rpcData.ParamData, 0);
+            }
+            var result = __CallAsync<T>(absoluteAddress, callType, rpcData, args).Result;
+            if (args.Length > 0)
+            {
+                rpcData.ParamData.CopyTo(args, 0);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Call a remote procedure, with a return type. Arguments are not passed by reference, and may not be manipulated by the calling process. Structs are shallow copy. Will await return signal.
+        /// </summary>
+        /// <param name="absoluteAddress"></param>
+        /// <param name="args"></param>
+        /// <returns></returns>
+        public async Task<T> CallAsync<T>(PointerEx absoluteAddress, params object[] args)
+        {
+            return await __CallAsync<T>(absoluteAddress, DefaultRPCType, null, args);
+        }
+
+        /// <summary>
+        /// Call a remote procedure, with a return type. Arguments are not passed by reference, and may not be manipulated by the calling process. Structs are shallow copy. Will await return signal.
+        /// </summary>
+        /// <param name="absoluteAddress"></param>
+        /// <param name="args">Arguments to pass. NOTE: Pointer Types are passed by value.</param>
+        /// <returns></returns>
+        public async Task<T> CallAsync<T>(PointerEx absoluteAddress, ExCallThreadType callType, params object[] args)
+        {
+            return await __CallAsync<T>(absoluteAddress, callType, null, args);
+        }
+
+        /// <summary>
+        /// Call a remote procedure, with a return type. Arguments are not passed by reference, and may not be manipulated by the calling process. Structs are shallow copy. Will await return signal.
+        /// </summary>
+        /// <param name="absoluteAddress"></param>
+        /// <param name="callType">Type of call to initiate. Some call types must be initialized to be used.</param>
+        /// <param name="outParams">If defined, is the struct to use to pass output params back into the input array</param>
+        /// <param name="args"></param>
+        /// <returns></returns>
+        private async Task<T> __CallAsync<T>(PointerEx absoluteAddress, ExCallThreadType callType, RPCParams outParams, object[] args)
         {
             if (!RPCStackFrame.CanSerializeType(typeof(T)))
             {
@@ -455,6 +519,28 @@ namespace System
                     // read return value
                     PointerEx r_val = (PointerSize() == 4 ? GetValue<uint>(raxStorAddress) : GetValue<ulong>(raxStorAddress));
 
+                    // deserialize args for ref calls
+                    if(outParams != null && outParams.ParamData.Length > 0)
+                    {
+                        for(int i = 0; i < outParams.ParamData.Length; i++)
+                        {
+                            // only deserialize ref types
+                            if (!stackFrame.IsArgByRef(i)) continue;
+
+                            var __type = outParams.ParamData[i].GetType();
+                            var __handle = stackFrame.GetArg(i);
+
+                            if(__type == typeof(string))
+                            {
+                                outParams.ParamData[i] = GetString(__handle);
+                                continue;
+                            }
+
+                            var __bytes = GetBytes(__handle, Marshal.SizeOf(__type));
+                            outParams.ParamData[i] = __bytes.ToStruct(__type);
+                        }
+                    }
+
                     // deserialize return value to expected type
 
                     // if its a string...
@@ -497,18 +583,6 @@ namespace System
             return default(T);
         }
 
-        /// <summary>
-        /// Call a remote procedure. Will not await a thread exit. If using an rpc method that is not thread safe, you may encounter a delayed execution of the thread, waiting for other RPC to continue.
-        /// </summary>
-        /// <param name="absoluteAddress"></param>
-        /// <param name="args"></param>
-        public void CallThreaded(PointerEx absoluteAddress, params object[] args)
-        {
-            Task.Run(() => { Call<int>(absoluteAddress, args); });
-        }
-
-        // TODO: CallRef
-
         private async Task CallRipHijack(PointerEx hShellcode, PointerEx threadStateAddress)
         {
             var targetThread = GetEarliestActiveThread();
@@ -516,10 +590,6 @@ namespace System
             {
                 throw new Exception("Unable to find a thread which can be hijacked.");
             }
-
-#if DEV
-            System.IO.File.AppendAllText("log.txt", $"targetThreadID: {targetThread.Id}\n");
-#endif
 
             var hThreadResume = QuickAlloc(4096, true);
             var hXmmSpace = QuickAlloc(256 * 2, true);
@@ -532,70 +602,41 @@ namespace System
 
                 lock (__hijackMutexTable[BaseProcess.Id])
                 {
-                    PointerEx hThread = OpenThread((int)ThreadAccess.THREAD_HIJACK, false, targetThread.Id);
+                    PointerEx hThread = ThreadContextEx.OpenThread((int)ThreadAccess.THREAD_HIJACK, false, targetThread.Id);
 
                     if (!hThread)
                     {
                         throw new Exception("Unable to open target thread for RPC...");
                     }
 
-#if DEV
-                    System.IO.File.AppendAllText("log.txt", $"hThread: {hThread}\n");
-#endif
-
-                    SuspendThread(hThread);
+                    ThreadContextEx.SuspendThread(hThread);
 
                     if(GetArchitecture() == Architecture.X86)
                     {
-                        CONTEXT _32_context = new CONTEXT();
-                        _32_context.ContextFlags = (uint)CONTEXT_FLAGS.CONTEXT_FULL;
-                        bool wow64CtxGetResult;
 
-                        if(Environment.Is64BitProcess)
-                        {
-                            wow64CtxGetResult = Wow64GetThreadContext(hThread, ref _32_context);
-                        }
-                        else
-                        {
-                            wow64CtxGetResult = GetThreadContext(hThread, ref _32_context);
-                        }
-
-                        if(!wow64CtxGetResult)
+                        ThreadContext32Ex ctx32 = new ThreadContext32Ex(ThreadContextExFlags.All);
+                        if(!ctx32.GetContext(hThread))
                         {
                             throw new Exception("Unable to get a thread context for the target process RPC.");
                         }
 
-                        HijackRipInternal32(hThread, hShellcode, hThreadResume, ref _32_context);
-
-                        if (Environment.Is64BitProcess)
-                        {
-                            Wow64SetThreadContext(hThread, _32_context);
-                        }
-                        else
-                        {
-                            SetThreadContext(hThread, _32_context);
-                        }
+                        HijackRipInternal32(hThread, hShellcode, hThreadResume, ctx32);
+                        ctx32.SetContext(hThread);
                     }
                     else
                     {
-                        CONTEXT64 _64_context = new CONTEXT64();
-                        _64_context.ContextFlags = CONTEXT_FLAGS.CONTEXT_FULL;
+                        ThreadContext64Ex ctx64 = new ThreadContext64Ex(ThreadContextExFlags.All);
 
-                        if (!GetThreadContext(hThread, ref _64_context))
+                        if (!ctx64.GetContext(hThread))
                         {
-                            throw new Win32Exception(Marshal.GetLastWin32Error());
                             throw new Exception("Unable to get a thread context for the target process RPC.");
                         }
 
-#if DEV
-                        System.IO.File.AppendAllText("log.txt", $"context obtained\n");
-#endif
-
-                        HijackRipInternal64(hThread, hShellcode, hThreadResume, hXmmSpace, ref _64_context);
-                        SetThreadContext(hThread, _64_context);
+                        HijackRipInternal64(hThread, hShellcode, hThreadResume, hXmmSpace, ctx64);
+                        ctx64.SetContext(hThread);
                     }
 
-                    ResumeThread(hThread);
+                    ThreadContextEx.ResumeThread(hThread);
                     CloseHandle(hThread);
                 }
 
@@ -627,23 +668,23 @@ namespace System
             
         }
 
-        private void HijackRipInternal64(PointerEx hThread, PointerEx hShellcode, PointerEx hIntercept, PointerEx hXmmSpace, ref CONTEXT64 threadContext)
+        private void HijackRipInternal64(PointerEx hThread, PointerEx hShellcode, PointerEx hIntercept, PointerEx hXmmSpace, ThreadContext64Ex threadContext)
         {
-            PointerEx originalIp = threadContext.Rip;
+            PointerEx originalIp = threadContext.InstructionPointer;
             byte[] data = ExAssembler.CreateThreadIntercept64(hShellcode, originalIp, hXmmSpace);
             SetBytes(hIntercept, data);
 #if DEV
-            System.IO.File.AppendAllText("log.txt", $"ripIntercept: {data.Hex()}\n");
+            System.IO.File.AppendAllText("log.txt", $"ripIntercept: {data.Hex()}\nhRipIntercept: {hIntercept:X}\nBase: {BaseAddress:X}\nOriginalIP: {originalIp:X}\n");
 #endif
-            threadContext.Rip = hIntercept;
+            threadContext.InstructionPointer = hIntercept;
         }
 
-        private void HijackRipInternal32(PointerEx hThread, PointerEx hShellcode, PointerEx hIntercept, ref CONTEXT threadContext)
+        private void HijackRipInternal32(PointerEx hThread, PointerEx hShellcode, PointerEx hIntercept, ThreadContext32Ex threadContext)
         {
-            PointerEx originalIp = threadContext.Eip;
+            PointerEx originalIp = threadContext.InstructionPointer;
             byte[] data = ExAssembler.CreateThreadIntercept32(hShellcode, originalIp);
             SetBytes(hIntercept, data);
-            threadContext.Eip = hIntercept;
+            threadContext.InstructionPointer = hIntercept;
         }
 
         /// <summary>
@@ -894,189 +935,12 @@ namespace System
         public readonly long APISetMap;
     }
 
-    // x86 float save
-    [StructLayout(LayoutKind.Sequential)]
-    public struct FLOATING_SAVE_AREA
+    /// <summary>
+    /// Params object for RPC output
+    /// </summary>
+    internal class RPCParams
     {
-        public uint ControlWord;
-        public uint StatusWord;
-        public uint TagWord;
-        public uint ErrorOffset;
-        public uint ErrorSelector;
-        public uint DataOffset;
-        public uint DataSelector;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 80)]
-        public byte[] RegisterArea;
-        public uint Cr0NpxState;
-    }
-
-    // x86 context structure (not used in this example)
-    [StructLayout(LayoutKind.Sequential)]
-    public struct CONTEXT
-    {
-        public uint ContextFlags; //set this to an appropriate value 
-                                  // Retrieved by CONTEXT_DEBUG_REGISTERS 
-        public uint Dr0;
-        public uint Dr1;
-        public uint Dr2;
-        public uint Dr3;
-        public uint Dr6;
-        public uint Dr7;
-        // Retrieved by CONTEXT_FLOATING_POINT 
-        public FLOATING_SAVE_AREA FloatSave;
-        // Retrieved by CONTEXT_SEGMENTS 
-        public uint SegGs;
-        public uint SegFs;
-        public uint SegEs;
-        public uint SegDs;
-        // Retrieved by CONTEXT_INTEGER 
-        public uint Edi;
-        public uint Esi;
-        public uint Ebx;
-        public uint Edx;
-        public uint Ecx;
-        public uint Eax;
-        // Retrieved by CONTEXT_CONTROL 
-        public uint Ebp;
-        public uint Eip;
-        public uint SegCs;
-        public uint EFlags;
-        public uint Esp;
-        public uint SegSs;
-        // Retrieved by CONTEXT_EXTENDED_REGISTERS 
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 512)]
-        public byte[] ExtendedRegisters;
-    }
-
-    // x64 m128a
-    [StructLayout(LayoutKind.Sequential)]
-    public struct M128A
-    {
-        public ulong High;
-        public long Low;
-
-        public override string ToString()
-        {
-            return string.Format("High:{0}, Low:{1}", this.High, this.Low);
-        }
-    }
-
-    // x64 save format
-    [StructLayout(LayoutKind.Sequential, Pack = 16)]
-    public struct XSAVE_FORMAT64
-    {
-        public ushort ControlWord;
-        public ushort StatusWord;
-        public byte TagWord;
-        public byte Reserved1;
-        public ushort ErrorOpcode;
-        public uint ErrorOffset;
-        public ushort ErrorSelector;
-        public ushort Reserved2;
-        public uint DataOffset;
-        public ushort DataSelector;
-        public ushort Reserved3;
-        public uint MxCsr;
-        public uint MxCsr_Mask;
-
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
-        public M128A[] FloatRegisters;
-
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
-        public M128A[] XmmRegisters;
-
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 96)]
-        public byte[] Reserved4;
-    }
-
-
-    public enum CONTEXT_FLAGS : uint
-    {
-        CONTEXT_i386 = 0x10000,
-        CONTEXT_i486 = 0x10000,   //  same as i386
-        CONTEXT_CONTROL = CONTEXT_i386 | 0x01, // SS:SP, CS:IP, FLAGS, BP
-        CONTEXT_INTEGER = CONTEXT_i386 | 0x02, // AX, BX, CX, DX, SI, DI
-        CONTEXT_SEGMENTS = CONTEXT_i386 | 0x04, // DS, ES, FS, GS
-        CONTEXT_FLOATING_POINT = CONTEXT_i386 | 0x08, // 387 state
-        CONTEXT_DEBUG_REGISTERS = CONTEXT_i386 | 0x10, // DB 0-3,6,7
-        CONTEXT_EXTENDED_REGISTERS = CONTEXT_i386 | 0x20, // cpu specific extensions
-        CONTEXT_FULL = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS,
-        CONTEXT_ALL = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS | CONTEXT_FLOATING_POINT | CONTEXT_DEBUG_REGISTERS | CONTEXT_EXTENDED_REGISTERS
-    }
-
-    // x64 context structure
-    [StructLayout(LayoutKind.Sequential, Pack = 16)]
-    public struct CONTEXT64
-    {
-        public ulong P1Home;
-        public ulong P2Home;
-        public ulong P3Home;
-        public ulong P4Home;
-        public ulong P5Home;
-        public ulong P6Home;
-
-        public CONTEXT_FLAGS ContextFlags;
-        public uint MxCsr;
-
-        public ushort SegCs;
-        public ushort SegDs;
-        public ushort SegEs;
-        public ushort SegFs;
-        public ushort SegGs;
-        public ushort SegSs;
-        public uint EFlags;
-
-        public ulong Dr0;
-        public ulong Dr1;
-        public ulong Dr2;
-        public ulong Dr3;
-        public ulong Dr6;
-        public ulong Dr7;
-
-        public ulong Rax;
-        public ulong Rcx;
-        public ulong Rdx;
-        public ulong Rbx;
-        public ulong Rsp;
-        public ulong Rbp;
-        public ulong Rsi;
-        public ulong Rdi;
-        public ulong R8;
-        public ulong R9;
-        public ulong R10;
-        public ulong R11;
-        public ulong R12;
-        public ulong R13;
-        public ulong R14;
-        public ulong R15;
-        public ulong Rip;
-
-        public XSAVE_FORMAT64 DUMMYUNIONNAME;
-
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 26)]
-        public M128A[] VectorRegister;
-        public ulong VectorControl;
-
-        public ulong DebugControl;
-        public ulong LastBranchToRip;
-        public ulong LastBranchFromRip;
-        public ulong LastExceptionToRip;
-        public ulong LastExceptionFromRip;
-    }
-
-    public enum ThreadAccess : int
-    {
-        TERMINATE = (0x0001),
-        SUSPEND_RESUME = (0x0002),
-        GET_CONTEXT = (0x0008),
-        SET_CONTEXT = (0x0010),
-        SET_INFORMATION = (0x0020),
-        QUERY_INFORMATION = (0x0040),
-        SET_THREAD_TOKEN = (0x0080),
-        IMPERSONATE = (0x0100),
-        DIRECT_IMPERSONATION = (0x0200),
-        THREAD_HIJACK = SUSPEND_RESUME | GET_CONTEXT | SET_CONTEXT,
-        THREAD_ALL = TERMINATE | SUSPEND_RESUME | GET_CONTEXT | SET_CONTEXT | SET_INFORMATION | QUERY_INFORMATION | SET_THREAD_TOKEN | IMPERSONATE | DIRECT_IMPERSONATION
+        public object[] ParamData;
     }
     #endregion
     #endregion

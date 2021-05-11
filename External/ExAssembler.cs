@@ -24,12 +24,22 @@ namespace System
 
         private static byte[] CreateRemoteCall64(PointerEx jumpLocation, PointerEx[] args, PointerEx raxStorAddress, PointerEx threadStateAddress, byte xmmMask, ExXMMReturnType xmmReturnType)
         {
+            if (!raxStorAddress)
+                throw new InvalidOperationException("Unable to execute a 64 bit function without RAXStor");
+
             List<byte> data = new List<byte>();
 
-            // sub rsp, 0x28
-            data.AddRange(new byte[] { 0x48, 0x83, 0xEC, 0x28 });
+            // movabs rax, raxStorAddress
+            data.AddRange(new byte[] { 0x48, 0xb8 });
+            data.AddRange(BitConverter.GetBytes((long)raxStorAddress));
 
-            for(int i = args.Length - 1; i > -1; i--)
+            // mov QWORD PTR [rax], rsp
+            // mov rax, -16
+            // and rsp, rax
+            // sub rsp, 32
+            data.AddRange(new byte[] { 0x48, 0x89, 0x20, 0x48, 0xC7, 0xC0, 0xF0, 0xFF, 0xFF, 0xFF, 0x48, 0x21, 0xC4, 0x48, 0x83, 0xEC, 0x20 });
+
+            for (int i = args.Length - 1; i > -1; i--)
             {
                 var arg = args[i];
                 if(i < 4 && (PointerEx)(xmmMask & (1 << i)))
@@ -165,6 +175,9 @@ namespace System
                 }
             }
 
+            // sub rsp, 0x20 for the shadow store
+            data.AddRange(new byte[] { 0x48, 0x83, 0xEC, 0x20 });
+
             // mov rax, jumploc
             data.AddRange(new byte[] { 0x48, 0xB8 });
             data.AddRange(BitConverter.GetBytes((long)jumpLocation));
@@ -172,30 +185,37 @@ namespace System
             // call rax
             data.AddRange(new byte[] { 0xFF, 0xD0 });
 
-            if (raxStorAddress)
+            // add rsp, 0x20 for removing shadow store
+            data.AddRange(new byte[] { 0x48, 0x83, 0xC4, 0x20 });
+
+            // movabs rbx, raxStorAddress
+            data.AddRange(new byte[] { 0x48, 0xBB });
+            data.AddRange(BitConverter.GetBytes((long)raxStorAddress));
+
+            // mov rsp, QWORD PTR[rbx]
+            data.AddRange(new byte[] { 0x48, 0x8B, 0x23 });
+
+            if (xmmReturnType == ExXMMReturnType.XMMR_NONE)
             {
-                if(xmmReturnType == ExXMMReturnType.XMMR_NONE)
+                // mov ReturnAddress, rax
+                data.AddRange(new byte[] { 0x48, 0xA3 });
+                data.AddRange(BitConverter.GetBytes((long)raxStorAddress));
+            }
+            else
+            {
+                // mov rax, ReturnAddress
+                data.AddRange(new byte[] { 0x48, 0xB8 });
+                data.AddRange(BitConverter.GetBytes((long)raxStorAddress));
+
+                if (xmmReturnType == ExXMMReturnType.XMMR_SINGLE)
                 {
-                    // mov ReturnAddress, rax
-                    data.AddRange(new byte[] { 0x48, 0xA3 });
-                    data.AddRange(BitConverter.GetBytes((long)raxStorAddress));
+                    // movss DWORD PTR [rax], xmm0
+                    data.AddRange(new byte[] { 0xF3, 0x0F, 0x11, 0x00 });
                 }
                 else
                 {
-                    // mov rax, ReturnAddress
-                    data.AddRange(new byte[] { 0x48, 0xB8 });
-                    data.AddRange(BitConverter.GetBytes((long)raxStorAddress));
-
-                    if(xmmReturnType == ExXMMReturnType.XMMR_SINGLE)
-                    {
-                        // movss DWORD PTR [rax], xmm0
-                        data.AddRange(new byte[] { 0xF3, 0x0F, 0x11, 0x00 });
-                    }
-                    else
-                    {
-                        // movlpd QWORD PTR [rax],xmm0
-                        data.AddRange(new byte[] { 0x66, 0x0F, 0x13, 0x00 });
-                    }
+                    // movlpd QWORD PTR [rax],xmm0
+                    data.AddRange(new byte[] { 0x66, 0x0F, 0x13, 0x00 });
                 }
             }
 
@@ -209,9 +229,6 @@ namespace System
 
             // xor rax, rax
             data.AddRange(new byte[] { 0x31, 0xC0 });
-
-            // add rsp, 0x28
-            data.AddRange(new byte[] { 0x48, 0x83, 0xC4, 0x28 });
 
             // ret
             data.Add(0xC3);
@@ -303,17 +320,6 @@ namespace System
         {
             List<byte> data = new List<byte>();
 
-            // sub rsp, 0x8
-            data.AddRange(new byte[] { 0x48, 0x83, 0xEC, 0x08 });
-
-            // mov DWORD PTR [rsp], originalIP_l
-            data.AddRange(new byte[] { 0xC7, 0x04, 0x24 });
-            data.AddRange(BitConverter.GetBytes((int)originalIP));
-
-            // mov DWORD PTR [rsp+0x4], originalIP_h
-            data.AddRange(new byte[] { 0xC7, 0x44, 0x24, 0x04 });
-            data.AddRange(BitConverter.GetBytes((int)((long)originalIP >> 32)));
-
             // push all the standard registers
             data.AddRange(new byte[] { 0x9C, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x41, 0x50, 0x41, 0x51, 0x41, 0x52, 0x41, 0x53, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57 });
 
@@ -350,6 +356,17 @@ namespace System
 
             // pop all the standard registers
             data.AddRange(new byte[] { 0x41, 0x5F, 0x41, 0x5E, 0x41, 0x5D, 0x41, 0x5C, 0x41, 0x5B, 0x41, 0x5A, 0x41, 0x59, 0x41, 0x58, 0x5F, 0x5E, 0x5D, 0x5C, 0x5B, 0x5A, 0x59, 0x58, 0x9D });
+
+            // sub rsp, 0x8
+            data.AddRange(new byte[] { 0x48, 0x83, 0xEC, 0x08 });
+
+            // mov DWORD PTR [rsp], originalIP_l
+            data.AddRange(new byte[] { 0xC7, 0x04, 0x24 });
+            data.AddRange(BitConverter.GetBytes((int)originalIP));
+
+            // mov DWORD PTR [rsp+0x4], originalIP_h
+            data.AddRange(new byte[] { 0xC7, 0x44, 0x24, 0x04 });
+            data.AddRange(BitConverter.GetBytes((int)((long)originalIP >> 32)));
 
             // ret
             data.Add(0xC3);
