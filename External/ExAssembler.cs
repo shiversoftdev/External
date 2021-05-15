@@ -15,7 +15,7 @@ namespace System
 
         public static byte[] CreateRemoteCall(PointerEx jumpLocation, PointerEx[] args, int pointerSize, PointerEx raxStorAddress, PointerEx threadStateAddress, byte xmmMask_64 = 0, ExXMMReturnType xmmReturnType = ExXMMReturnType.XMMR_NONE)
         {
-            if(pointerSize == 8)
+            if (pointerSize == 8)
             {
                 return CreateRemoteCall64(jumpLocation, args, raxStorAddress, threadStateAddress, xmmMask_64, xmmReturnType);
             }
@@ -42,7 +42,7 @@ namespace System
             for (int i = args.Length - 1; i > -1; i--)
             {
                 var arg = args[i];
-                if(i < 4 && (PointerEx)(xmmMask & (1 << i)))
+                if (i < 4 && (PointerEx)(xmmMask & (1 << i)))
                 {
                     bool is64xmm = (PointerEx)(xmmMask & (1 << i + 4));
 
@@ -261,7 +261,7 @@ namespace System
             // call eax
             data.AddRange(new byte[] { 0xFF, 0xD0 });
 
-            if(eaxStorAddress)
+            if (eaxStorAddress)
             {
                 // mov eaxStorAddress, eax
                 data.Add(0xA3);
@@ -320,8 +320,12 @@ namespace System
         {
             List<byte> data = new List<byte>();
 
+            // pushf TWICE
+            // the reason is because we need padding space behind the saved flags so that we can place our fake return pointer back there
+            data.AddRange(new byte[] { 0x9C, 0x9C });
+
             // push all the standard registers
-            data.AddRange(new byte[] { 0x9C, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x41, 0x50, 0x41, 0x51, 0x41, 0x52, 0x41, 0x53, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57 });
+            data.AddRange(new byte[] { 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x41, 0x50, 0x41, 0x51, 0x41, 0x52, 0x41, 0x53, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57 });
 
             // mov rax, xmmSpace
             data.AddRange(new byte[] { 0x48, 0xB8 });
@@ -355,18 +359,22 @@ namespace System
                                        0x0F, 0x28, 0xB0, 0xE0, 0x00, 0x00, 0x00, 0x66, 0x44, 0x0F, 0x28, 0xB8, 0xF0, 0x00, 0x00, 0x00 });
 
             // pop all the standard registers
-            data.AddRange(new byte[] { 0x41, 0x5F, 0x41, 0x5E, 0x41, 0x5D, 0x41, 0x5C, 0x41, 0x5B, 0x41, 0x5A, 0x41, 0x59, 0x41, 0x58, 0x5F, 0x5E, 0x5D, 0x5C, 0x5B, 0x5A, 0x59, 0x58, 0x9D });
+            data.AddRange(new byte[] { 0x41, 0x5F, 0x41, 0x5E, 0x41, 0x5D, 0x41, 0x5C, 0x41, 0x5B, 0x41, 0x5A, 0x41, 0x59, 0x41, 0x58, 0x5F, 0x5E, 0x5D, 0x5C, 0x5B, 0x5A, 0x59, 0x58 });
 
             // sub rsp, 0x8
-            data.AddRange(new byte[] { 0x48, 0x83, 0xEC, 0x08 });
+            // data.AddRange(new byte[] { 0x48, 0x83, 0xEC, 0x08 });
+            // no longer need to move rsp since we reserve space by flags push
 
-            // mov DWORD PTR [rsp], originalIP_l
-            data.AddRange(new byte[] { 0xC7, 0x04, 0x24 });
+            // mov DWORD PTR [rsp+8], originalIP_l
+            data.AddRange(new byte[] { 0xC7, 0x44, 0x24, 0x08 });
             data.AddRange(BitConverter.GetBytes((int)originalIP));
 
-            // mov DWORD PTR [rsp+0x4], originalIP_h
-            data.AddRange(new byte[] { 0xC7, 0x44, 0x24, 0x04 });
+            // mov DWORD PTR [rsp+0xC], originalIP_h
+            data.AddRange(new byte[] { 0xC7, 0x44, 0x24, 0x0C });
             data.AddRange(BitConverter.GetBytes((int)((long)originalIP >> 32)));
+
+            // popf here, so flags are 100% correct
+            data.Add(0x9D);
 
             // ret
             data.Add(0xC3);
@@ -375,7 +383,7 @@ namespace System
     }
 
     public enum ExXMMReturnType
-    { 
+    {
         XMMR_NONE,
         XMMR_SINGLE,
         XMMR_DOUBLE

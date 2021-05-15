@@ -44,7 +44,7 @@ namespace System
         /// <typeparam name="T"></typeparam>
         /// <param name="data"></param>
         /// <returns></returns>
-        internal static T ToStructUnsafe<T>(this byte[] data)
+        public static T ToStructUnsafe<T>(this byte[] data)
         {
             GCHandle handle = GCHandle.Alloc(data, GCHandleType.Pinned);
             T val = (T)Marshal.PtrToStructure(handle.AddrOfPinnedObject(), typeof(T));
@@ -59,6 +59,23 @@ namespace System
         /// <param name="s"></param>
         /// <returns></returns>
         public static byte[] ToByteArray<T>(this T s) where T : struct
+        {
+            PointerEx size = Marshal.SizeOf(s);
+            byte[] data = new byte[size];
+            PointerEx dwStruct = Marshal.AllocHGlobal((int)size);
+            Marshal.StructureToPtr(s, dwStruct, true);
+            Marshal.Copy(dwStruct, data, 0, size);
+            Marshal.FreeHGlobal(dwStruct);
+            return data;
+        }
+
+        /// <summary>
+        /// Converts a struct to a byte array, but promises that the generic constraint is met by the programmer, not the compiler.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="s"></param>
+        /// <returns></returns>
+        public static byte[] ToByteArrayUnsafe<T>(this T s)
         {
             PointerEx size = Marshal.SizeOf(s);
             byte[] data = new byte[size];

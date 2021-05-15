@@ -30,10 +30,11 @@ namespace ExternalTestingUtility
         private void InitializeComponent()
         {
             this.InnerForm = new Refract.UI.Core.Controls.CBorderedForm();
+            this.ExampleRPC4 = new System.Windows.Forms.Button();
             this.RPCExample3 = new System.Windows.Forms.Button();
             this.RPCExample2 = new System.Windows.Forms.Button();
             this.RPCTest1 = new System.Windows.Forms.Button();
-            this.ExampleRPC4 = new System.Windows.Forms.Button();
+            this.ExampleRPC5 = new System.Windows.Forms.Button();
             this.InnerForm.ControlContents.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -43,6 +44,7 @@ namespace ExternalTestingUtility
             // 
             // InnerForm.ControlContents
             // 
+            this.InnerForm.ControlContents.Controls.Add(this.ExampleRPC5);
             this.InnerForm.ControlContents.Controls.Add(this.ExampleRPC4);
             this.InnerForm.ControlContents.Controls.Add(this.RPCExample3);
             this.InnerForm.ControlContents.Controls.Add(this.RPCExample2);
@@ -61,6 +63,17 @@ namespace ExternalTestingUtility
             this.InnerForm.TabIndex = 0;
             this.InnerForm.TitleBarTitle = "External Cheat Example";
             this.InnerForm.UseTitleBar = true;
+            // 
+            // ExampleRPC4
+            // 
+            this.ExampleRPC4.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.ExampleRPC4.Location = new System.Drawing.Point(8, 44);
+            this.ExampleRPC4.Name = "ExampleRPC4";
+            this.ExampleRPC4.Size = new System.Drawing.Size(80, 30);
+            this.ExampleRPC4.TabIndex = 3;
+            this.ExampleRPC4.Text = "MP Classes";
+            this.ExampleRPC4.UseVisualStyleBackColor = true;
+            this.ExampleRPC4.Click += new System.EventHandler(this.ExampleRPC4_Click);
             // 
             // RPCExample3
             // 
@@ -95,16 +108,16 @@ namespace ExternalTestingUtility
             this.RPCTest1.UseVisualStyleBackColor = true;
             this.RPCTest1.Click += new System.EventHandler(this.RPCTest1_Click);
             // 
-            // ExampleRPC4
+            // ExampleRPC5
             // 
-            this.ExampleRPC4.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.ExampleRPC4.Location = new System.Drawing.Point(8, 44);
-            this.ExampleRPC4.Name = "ExampleRPC4";
-            this.ExampleRPC4.Size = new System.Drawing.Size(80, 30);
-            this.ExampleRPC4.TabIndex = 3;
-            this.ExampleRPC4.Text = "MP Classes";
-            this.ExampleRPC4.UseVisualStyleBackColor = true;
-            this.ExampleRPC4.Click += new System.EventHandler(this.ExampleRPC4_Click);
+            this.ExampleRPC5.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.ExampleRPC5.Location = new System.Drawing.Point(94, 44);
+            this.ExampleRPC5.Name = "ExampleRPC5";
+            this.ExampleRPC5.Size = new System.Drawing.Size(80, 30);
+            this.ExampleRPC5.TabIndex = 4;
+            this.ExampleRPC5.Text = "ZM Classes";
+            this.ExampleRPC5.UseVisualStyleBackColor = true;
+            this.ExampleRPC5.Click += new System.EventHandler(this.button1_Click);
             // 
             // MainForm
             // 
@@ -127,6 +140,7 @@ namespace ExternalTestingUtility
         private System.Windows.Forms.Button RPCExample2;
         private System.Windows.Forms.Button RPCExample3;
         private System.Windows.Forms.Button ExampleRPC4;
+        private System.Windows.Forms.Button ExampleRPC5;
     }
 }
 

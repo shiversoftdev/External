@@ -89,7 +89,7 @@ namespace System
    
             if (obj.GetType().IsValueType)
             {
-                var _data = UtilExtensions.ToByteArray(obj);
+                var _data = UtilExtensions.ToByteArrayUnsafe(obj);
 
                 if(IsByValue(obj.GetType()))
                 {

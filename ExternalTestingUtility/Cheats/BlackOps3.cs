@@ -15,6 +15,8 @@ namespace ExternalTestingUtility.Cheats
             public const ulong OFF_CBUF_ADDTEXT = 0x20EC8B0;
             public const ulong OFF_DVAR_SETFROMSTRINGBYNAME = 0x22C7F60;
             public const ulong OFF_BG_UNLOCKABLESSETCLASSSETITEM = 0x26AE260;
+            public const ulong OFF_LiveStats_Loadouts_GetCACRoot = 0x1EAF030;
+            public const ulong OFF_BG_UnlockablesSetBubbleGumBuff = 0x26AE000;
         }
 
 
@@ -69,6 +71,35 @@ namespace ExternalTestingUtility.Cheats
             return Game.Call<bool>(f, controllerIndex, classSetType, classSetIndex, customClass, slotName, itemIndex);
         }
 
+        internal static void SetBubbleGumSlot(int packIndex, int buffIndex, int itemIndex)
+        {
+            LiveStats_Loadouts_GetCACRoot(out CACRoot cacroot, 0, CACType.CAC_TYPE_ZM_ONLINE);
+            BG_UnlockablesSetBubbleGumBuff(cacroot, packIndex, buffIndex, itemIndex);
+        }
+
+        internal static void SetZMWeaponLoadout(int WeaponIndex, ZMLoadoutData LoadoutInfo)
+        {
+            for(int i = 0; i < 5; i++)
+            {
+                SetBubbleGumSlot(0, i, 252);
+            }
+        }
+
+        internal static void BG_UnlockablesSetBubbleGumBuff(CACRoot cacRoot, int packIndex, int buffIndex, int itemIndex)
+        {
+            if (cacRoot.ddlContext == 0 || cacRoot.rootState == 0) return;
+            var f = Game[OFF_BG_UnlockablesSetBubbleGumBuff];
+            Game.Call<long>(f, cacRoot, packIndex, buffIndex, itemIndex);
+        }
+
+        internal static void LiveStats_Loadouts_GetCACRoot(out CACRoot outroot, uint controllerindex, CACType cacType)
+        {
+            var f = Game[OFF_LiveStats_Loadouts_GetCACRoot];
+            object[] args = new object[] { new CACRoot(), controllerindex, cacType };
+            Game.CallRef<bool>(f, ref args);
+            outroot = (CACRoot)args[0];
+        }
+
         #region typedef
         internal enum ClassSetType : int
         {
@@ -106,6 +137,41 @@ namespace ExternalTestingUtility.Cheats
             DEFAULT_CLASS_LAST = 0xE,
             TOTAL_CLASS_COUNT = 0xF,
         };
+
+        internal enum CACType : int
+        {
+            CAC_TYPE_INVALID = -1,
+            CAC_TYPE_MP_PUBLIC = 0x0,
+            CAC_TYPE_MP_CUSTOM = 0x1,
+            CAC_TYPE_MP_ARENA = 0x2,
+            CAC_TYPE_MP_OFFLINE = 0x3,
+            CAC_TYPE_FR = 0x4,
+            CAC_TYPE_FR_OFFLINE = 0x5,
+            CAC_TYPE_CP_ONLINE = 0x6,
+            CAC_TYPE_CP_OFFLINE = 0x7,
+            CAC_TYPE_ZM_ONLINE = 0x8,
+            CAC_TYPE_ZM_OFFLINE = 0x9,
+            CAC_TYPE_COUNT = 0xA,
+        };
+
+        internal struct CACRoot
+        {
+            public long ddlContext;
+            public long rootState;
+        };
+
+        internal struct ZMLoadoutData
+        {
+            public int CamoIndex;
+            public int Attachment1;
+            public int Attachment2;
+            public int Attachment3;
+            public int Attachment4;
+            public int Attachment5;
+            public int Attachment6;
+            public int Attachment7;
+            public int Attachment8;
+        }
         #endregion
     }
 }

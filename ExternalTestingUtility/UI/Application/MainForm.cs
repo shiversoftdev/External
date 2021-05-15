@@ -33,6 +33,7 @@ namespace ExternalTestingUtility
             yield return RPCExample2;
             yield return RPCExample3;
             yield return ExampleRPC4;
+            yield return ExampleRPC5;
         }
 
         private void OnThemeChanged_Implementation(UIThemeInfo currentTheme)
@@ -66,6 +67,11 @@ namespace ExternalTestingUtility
             BlackOps3.BG_UnlockablesSetClassSetItem(CLASS_SET_TYPE_MP_PUBLIC, 0, CUSTOM_CLASS_1, "primaryattachment6", 14);
             BlackOps3.BG_UnlockablesSetClassSetItem(CLASS_SET_TYPE_MP_PUBLIC, 0, CUSTOM_CLASS_1, "primaryattachment7", 12);
             BlackOps3.BG_UnlockablesSetClassSetItem(CLASS_SET_TYPE_MP_PUBLIC, 0, CUSTOM_CLASS_1, "primaryattachment8", 13);
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            BlackOps3.SetZMWeaponLoadout(1, new BlackOps3.ZMLoadoutData());
         }
     }
 }

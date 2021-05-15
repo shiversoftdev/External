@@ -20,3 +20,4 @@ Testing TODO:
 Bug Fixes TODO:
 	
 	Process wait monitor for a closed process does not correctly work.
+	Still appears to be sporadic crashing sometimes in the process. I suspect todo with register values being corrupted.
