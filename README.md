@@ -23,4 +23,7 @@ It includes the following:\
     - IntPtr.Add() extension method\
     - IntPtr.Subtract() extension method\
     \
-And much, much more is planned (hopefully avoiding bloat).\
+And much, much more is planned (hopefully avoiding bloat)
+# Special Thanks
+https://github.com/Dewera/Lunar \
+https://github.com/cobbr/SharpSploit
