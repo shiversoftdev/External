@@ -174,5 +174,17 @@ namespace System
             }
             return new string(result);
         }
+
+        /// <summary>
+        /// Creates an unmanaged copy of a byte array, and then returns a handle to it. Must be freed manually.
+        /// </summary>
+        /// <param name="bytes"></param>
+        /// <returns></returns>
+        public static PointerEx Unmanaged(this byte[] bytes)
+        {
+            IntPtr pFile = Marshal.AllocHGlobal(bytes.Length);
+            Marshal.Copy(bytes, 0, pFile, bytes.Length);
+            return pFile;
+        }
     }
 }

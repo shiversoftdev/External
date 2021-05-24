@@ -128,7 +128,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="EnvironmentEx.cs" />
+    <Compile Include="Evasion\DInvoke.cs" />
+    <Compile Include="Evasion\EnvPatch.cs" />
+    <Compile Include="Evasion\ModuleMapper.cs" />
     <Compile Include="ExAssembler.cs" />
+    <Compile Include="Native.cs" />
     <Compile Include="PEStructures\PEExportDirectory.cs" />
     <Compile Include="MemorySearcher.cs" />
     <Compile Include="PEStructures\PEDataDirectory.cs" />
@@ -138,6 +142,7 @@
     <Compile Include="PEStructures\PERelocationDirectory.cs" />
     <Compile Include="PEStructures\PEResourceDirectory.cs" />
     <Compile Include="PEStructures\PETlsDirectory.cs" />
+    <Compile Include="PEStructures\PETypes.cs" />
     <Compile Include="PointerEx.cs" />
     <Compile Include="PointerExtensions.cs" />
     <Compile Include="ProcessEx.cs" />

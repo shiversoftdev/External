@@ -19,6 +19,9 @@ namespace ExternalTestingUtility
     {
         public MainForm()
         {
+            // Sets up stealth calls for native funcs to try to avoid api hooking
+            NativeStealth.SetStealthMode(NativeStealthType.ManualInvoke);
+
             InitializeComponent();
             UIThemeManager.OnThemeChanged(this, OnThemeChanged_Implementation);
             this.SetThemeAware();

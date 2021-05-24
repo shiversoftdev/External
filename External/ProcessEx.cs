@@ -35,14 +35,6 @@ namespace System
         public const int MEM_RESERVE = 0x00002000;
         public const int MEM_PRIVATE = 0x20000;
         public const int MEM_IMAGE = 0x1000000;
-        public const uint PAGE_GUARD = 0x100;
-        public const uint PAGE_NOACCESS = 0x01;
-        public const uint PAGE_READONLY = 0x02;
-        public const uint PAGE_WRITECOPY = 0x08;
-        public const uint PAGE_EXECUTE_READWRITE = 0x40;
-        public const uint PAGE_EXECUTE_WRITECOPY = 0x80;
-        public const uint PAGE_EXECUTE = 0x10;
-        public const uint PAGE_EXECUTE_READ = 0x20;
         #endregion
 
         #region typedef
@@ -60,20 +52,6 @@ namespace System
             internal uint dwAllocationGranularity;
             internal ushort wProcessorLevel;
             internal ushort wProcessorRevision;
-        }
-
-        [Flags]
-        public enum AllocationType
-        {
-            Commit = 0x1000,
-            Reserve = 0x2000,
-            Decommit = 0x4000,
-            Release = 0x8000,
-            Reset = 0x80000,
-            Physical = 0x400000,
-            TopDown = 0x100000,
-            WriteWatch = 0x200000,
-            LargePages = 0x20000000
         }
 
         [Flags]
@@ -110,9 +88,6 @@ namespace System
         [DllImport("kernel32.dll")]
         public static extern PointerEx OpenProcess(int dwDesiredAccess, bool bInheritHandle, int dwProcessId);
 
-        [DllImport("kernel32.dll")]
-        public static extern bool ReadProcessMemory(PointerEx hProcess, PointerEx lpBaseAddress, [Out] byte[] lpBuffer, PointerEx dwSize, ref PointerEx lpNumberOfBytesRead);
-
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool GetExitCodeProcess(PointerEx hProcess, out uint ExitCode);
 
@@ -126,13 +101,10 @@ namespace System
         public static extern PointerEx VirtualQueryEx(PointerEx hProcess, PointerEx lpAddress, out MEMORY_BASIC_INFORMATION lpBuffer, uint dwLength);
 
         [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool WriteProcessMemory(PointerEx hProcess, PointerEx lpBaseAddress, byte[] lpBuffer, int dwSize, ref PointerEx lpNumberOfBytesWritten);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool VirtualAlloc2(PointerEx hProcess, PointerEx lpBaseAddress, int RegionSize, ulong AllocType, ulong PageProtection);
 
         [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
-        public static extern PointerEx VirtualAllocEx(PointerEx hProcess, PointerEx lpAddress, uint dwSize, AllocationType flAllocationType, MemoryProtection flProtect);
+        public static extern PointerEx VirtualAllocEx(PointerEx hProcess, PointerEx lpAddress, uint dwSize, Native.AllocationType flAllocationType, MemoryProtection flProtect);
 
         [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
         public static extern bool VirtualFreeEx(PointerEx hProcess, PointerEx lpAddress, uint dwSize, int dwFreeType);
@@ -249,7 +221,7 @@ namespace System
             if (!Handle) throw new InvalidOperationException("Tried to read from a memory region when a handle to the desired process doesn't exist");
             byte[] data = new byte[NumBytes];
             PointerEx bytesRead = IntPtr.Zero;
-            ReadProcessMemory(Handle, absoluteAddress, data, NumBytes, ref bytesRead);
+            NativeStealth.ReadProcessMemory(Handle, absoluteAddress, data, NumBytes, ref bytesRead);
             if (bytesRead != NumBytes) throw new InvalidOperationException($"Failed to read data of size {NumBytes} from address 0x{absoluteAddress}");
             return data;
         }
@@ -258,7 +230,7 @@ namespace System
         {
             if (!Handle) throw new InvalidOperationException("Tried to write to a memory region when a handle to the desired process doesn't exist");
             PointerEx bytesWritten = IntPtr.Zero;
-            WriteProcessMemory(Handle, absoluteAddress, data, data.Length, ref bytesWritten);
+            NativeStealth.WriteProcessMemory(Handle, absoluteAddress, data, data.Length, ref bytesWritten);
             if (bytesWritten != data.Length) throw new InvalidOperationException($"Failed to write {data.Length} bytes to region 0x{absoluteAddress}");
         }
 
@@ -643,6 +615,9 @@ namespace System
 #if DEV
                 System.IO.File.AppendAllText("log.txt", $"awaiting thread exit...\n");
 #endif
+                // necessary wait, buffer time for something, without it, rpc hangs...
+                Thread.Sleep(1);
+
                 // await thread exit status
                 while (Handle)
                 {
@@ -696,7 +671,7 @@ namespace System
         public PointerEx QuickAlloc(PointerEx size_region, bool Executable = false)
         {
             if (!Handle) throw new InvalidOperationException("Tried to allocate a memory region when a handle to the desired process doesn't exist");
-            return VirtualAllocEx(Handle, 0, size_region, AllocationType.Commit, Executable ? MemoryProtection.ExecuteReadWrite : MemoryProtection.ReadWrite);
+            return VirtualAllocEx(Handle, 0, size_region, Native.AllocationType.Commit, Executable ? MemoryProtection.ExecuteReadWrite : MemoryProtection.ReadWrite);
         }
 
         /// <summary>
