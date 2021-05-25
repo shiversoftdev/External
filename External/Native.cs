@@ -94,6 +94,22 @@ namespace System
             LargePages = 0x20000000
         }
 
+        [Flags]
+        public enum MemoryProtection
+        {
+            Execute = 0x10,
+            ExecuteRead = 0x20,
+            ExecuteReadWrite = 0x40,
+            ExecuteWriteCopy = 0x80,
+            NoAccess = 0x01,
+            ReadOnly = 0x02,
+            ReadWrite = 0x04,
+            WriteCopy = 0x08,
+            GuardModifierflag = 0x100,
+            NoCacheModifierflag = 0x200,
+            WriteCombineModifierflag = 0x400
+        }
+
         /// <summary>
         /// NTSTATUS is an undocument enum. https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-erref/596a1078-e883-4972-9bbc-49e60bebca55
         /// https://www.pinvoke.net/default.aspx/Enums/NtStatus.html
@@ -758,11 +774,11 @@ namespace System
         }
         #endregion
 
-#region categorized P, D, M
-#region process
+        #region categorized P = PInvoke, D = DInvoke, M = Manual DInvoke
+        #region process
 
-#region WriteProcessMemory
-#if USE_PINVOKE
+        #region WriteProcessMemory
+        #if USE_PINVOKE
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool WriteProcessMemory(PointerEx hProcess, PointerEx lpBaseAddress, byte[] lpBuffer, int dwSize, ref PointerEx lpNumberOfBytesWritten);
 
@@ -770,7 +786,7 @@ namespace System
         {
             return WriteProcessMemory(hProcess, lpBaseAddress, lpBuffer, dwSize, ref lpNumberOfBytesWritten);
         }
-#else
+        #else
         public static bool WriteProcessMemoryD(PointerEx hProcess, PointerEx lpBaseAddress, byte[] lpBuffer, int dwSize, ref PointerEx lpNumberOfBytesWritten)
         {
             // Craft an array for the arguments
@@ -784,7 +800,7 @@ namespace System
 
             return retValue;
         }
-#endif
+        #endif
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         public delegate bool _WriteProcessMemory(PointerEx hProcess, PointerEx lpBaseAddress, byte[] lpBuffer, int dwSize, ref PointerEx lpNumberOfBytesWritten);
         public static bool WriteProcessMemoryM(PointerEx hProcess, PointerEx lpBaseAddress, byte[] lpBuffer, int dwSize, ref PointerEx lpNumberOfBytesWritten)
@@ -802,15 +818,15 @@ namespace System
         }
         #endregion
 
-#region ReadProcessMemory
-#if USE_PINVOKE
+        #region ReadProcessMemory
+        #if USE_PINVOKE
         [DllImport("kernel32.dll")]
         private static extern bool ReadProcessMemory(PointerEx hProcess, PointerEx lpBaseAddress, [Out] byte[] lpBuffer, PointerEx dwSize, ref PointerEx lpNumberOfBytesRead);
         public static bool ReadProcessMemoryP(PointerEx hProcess, PointerEx lpBaseAddress, byte[] lpBuffer, PointerEx dwSize, ref PointerEx lpNumberOfBytesRead)
         {
             return ReadProcessMemory(hProcess, lpBaseAddress, lpBuffer, dwSize, ref lpNumberOfBytesRead);
         }
-#else
+        #else
         public static bool ReadProcessMemoryD(PointerEx hProcess, PointerEx lpBaseAddress, byte[] lpBuffer, PointerEx dwSize, ref PointerEx lpNumberOfBytesRead)
         {
             object[] funcArgs =
@@ -830,7 +846,7 @@ namespace System
             }
             return retValue;
         }
-#endif
+        #endif
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         public delegate bool _ReadProcessMemory(PointerEx hProcess, PointerEx lpBaseAddress, byte[] lpBuffer, PointerEx dwSize, ref PointerEx lpNumberOfBytesRead);
 
@@ -852,6 +868,185 @@ namespace System
                 throw new IndexOutOfRangeException("Destination buffer size is too small");
             }
             return retValue;
+        }
+        #endregion
+
+        #region VirtualAllocEx
+        #if USE_PINVOKE
+        [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
+        private static extern PointerEx VirtualAllocEx(PointerEx hProcess, PointerEx lpAddress, uint dwSize, AllocationType flAllocationType, MemoryProtection flProtect);
+
+        public static PointerEx VirtualAllocExP(PointerEx hProcess, PointerEx lpAddress, uint dwSize, AllocationType flAllocationType, MemoryProtection flProtect)
+        {
+            return VirtualAllocEx(hProcess, lpAddress, dwSize, flAllocationType, flProtect);
+        }
+        #else
+        public static PointerEx VirtualAllocExD(PointerEx hProcess, PointerEx lpAddress, uint dwSize, AllocationType flAllocationType, MemoryProtection flProtect)
+        {
+            object[] funcArgs =
+            {
+                hProcess, lpAddress, dwSize, flAllocationType, flProtect
+            };
+            return (PointerEx)Evasion.DInvoke.DynamicAPIInvoke(CONST_KERNEL32, @"VirtualAllocEx", typeof(_VirtualAllocEx), ref funcArgs);
+        }
+        #endif
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate PointerEx _VirtualAllocEx(PointerEx hProcess, PointerEx lpAddress, uint dwSize, AllocationType flAllocationType, MemoryProtection flProtect);
+        public static PointerEx VirtualAllocExM(PointerEx hProcess, PointerEx lpAddress, uint dwSize, AllocationType flAllocationType, MemoryProtection flProtect)
+        {
+            object[] funcArgs =
+            {
+                hProcess, lpAddress, dwSize, flAllocationType, flProtect
+            };
+            return (PointerEx)Evasion.DInvoke.ManualInvoke(CONST_KERNEL32, @"VirtualAllocEx", typeof(_VirtualAllocEx), ref funcArgs);
+        }
+        #endregion
+        #endregion
+        #region thread
+
+        #region OpenThread
+#if USE_PINVOKE
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern PointerEx OpenThread(int dwDesiredAccess, bool bInheritHandle, int dwThreadId);
+        public static PointerEx OpenThreadP(int dwDesiredAccess, bool bInheritHandle, int dwThreadId)
+        {
+            return OpenThread(dwDesiredAccess, bInheritHandle, dwThreadId);
+        }
+#else
+        public static PointerEx OpenThreadD(int dwDesiredAccess, bool bInheritHandle, int dwThreadId)
+        {
+            object[] funcArgs =
+            {
+                dwDesiredAccess, bInheritHandle, dwThreadId
+            };
+
+            return (PointerEx)Evasion.DInvoke.DynamicAPIInvoke(CONST_KERNEL32, "OpenThread", typeof(_OpenThread), ref funcArgs);
+        }
+#endif
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate PointerEx _OpenThread(int dwDesiredAccess, bool bInheritHandle, int dwThreadId);
+        public static PointerEx OpenThreadM(int dwDesiredAccess, bool bInheritHandle, int dwThreadId)
+        {
+            object[] funcArgs =
+            {
+                dwDesiredAccess, bInheritHandle, dwThreadId
+            };
+
+            return (PointerEx)Evasion.DInvoke.ManualInvoke(CONST_KERNEL32, "OpenThread", typeof(_OpenThread), ref funcArgs);
+        }
+        #endregion
+
+        #region SuspendThread
+#if USE_PINVOKE
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern PointerEx SuspendThread(PointerEx hThread);
+        public static PointerEx SuspendThreadP(PointerEx hThread)
+        {
+            return SuspendThread(hThread);
+        }
+#else
+        public static PointerEx SuspendThreadD(PointerEx hThread)
+        {
+            object[] funcArgs =
+            {
+                hThread
+            };
+            return (PointerEx)Evasion.DInvoke.DynamicAPIInvoke(CONST_KERNEL32, "SuspendThread", typeof(_SuspendThread), ref funcArgs);
+        }
+#endif
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate PointerEx _SuspendThread(PointerEx hThread);
+        public static PointerEx SuspendThreadM(PointerEx hThread)
+        {
+            object[] funcArgs =
+            {
+                hThread
+            };
+            return (PointerEx)Evasion.DInvoke.ManualInvoke(CONST_KERNEL32, "SuspendThread", typeof(_SuspendThread), ref funcArgs);
+        }
+        #endregion
+
+        #region GetThreadContext
+#if USE_PINVOKE
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool GetThreadContext(IntPtr hThread, IntPtr lpContext);
+        public static bool GetThreadContextP(IntPtr hThread, IntPtr lpContext)
+        {
+            return GetThreadContext(hThread, lpContext);
+        }
+#else
+        public static bool GetThreadContextD(IntPtr hThread, IntPtr lpContext)
+        {
+            object[] funcArgs =
+            {
+                hThread, lpContext
+            };
+            return (bool)Evasion.DInvoke.DynamicAPIInvoke(CONST_KERNEL32, "GetThreadContext", typeof(_GetThreadContext), ref funcArgs);
+        }
+#endif
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate bool _GetThreadContext(IntPtr hThread, IntPtr lpContext);
+        public static bool GetThreadContextM(IntPtr hThread, IntPtr lpContext)
+        {
+            object[] funcArgs =
+            {
+                hThread, lpContext
+            };
+            return (bool)Evasion.DInvoke.ManualInvoke(CONST_KERNEL32, "GetThreadContext", typeof(_GetThreadContext), ref funcArgs);
+        }
+        #endregion
+
+        #region SetThreadContext
+#if USE_PINVOKE
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool SetThreadContext(IntPtr hThread, IntPtr lpContext);
+        public static bool SetThreadContextP(IntPtr hThread, IntPtr lpContext)
+        {
+            return SetThreadContext(hThread, lpContext);
+        }
+#else
+        public static bool SetThreadContextD(IntPtr hThread, IntPtr lpContext)
+        {
+            object[] funcArgs =
+            {
+                hThread, lpContext
+            };
+            return (bool)Evasion.DInvoke.DynamicAPIInvoke(CONST_KERNEL32, "SetThreadContext", typeof(_SetThreadContext), ref funcArgs);
+        }
+#endif
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate bool _SetThreadContext(IntPtr hThread, IntPtr lpContext);
+        public static bool SetThreadContextM(IntPtr hThread, IntPtr lpContext)
+        {
+            object[] funcArgs =
+            {
+                hThread, lpContext
+            };
+            return (bool)Evasion.DInvoke.ManualInvoke(CONST_KERNEL32, "SetThreadContext", typeof(_SetThreadContext), ref funcArgs);
+        }
+        #endregion
+
+        #region ResumeThread
+#if USE_PINVOKE
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern uint ResumeThread(PointerEx hThread);
+        public static uint ResumeThreadP(PointerEx hThread)
+        {
+            return ResumeThread(hThread);
+        }
+#else
+        public static uint ResumeThreadD(PointerEx hThread)
+        {
+            object[] funcArgs = new object[] { hThread };
+            return (uint)Evasion.DInvoke.DynamicAPIInvoke(CONST_KERNEL32, "ResumeThread", typeof(_ResumeThread), ref funcArgs);
+        }
+#endif
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate uint _ResumeThread(PointerEx hThread);
+        public static uint ResumeThreadM(PointerEx hThread)
+        {
+            object[] funcArgs = new object[] { hThread };
+            return (uint)Evasion.DInvoke.ManualInvoke(CONST_KERNEL32, "ResumeThread", typeof(_ResumeThread), ref funcArgs);
         }
         #endregion
 
@@ -932,21 +1127,45 @@ namespace System
         public static NativeStealthType Stealth { get; private set; }
         public static Native._WriteProcessMemory WriteProcessMemory { get; private set; }
         public static Native._ReadProcessMemory ReadProcessMemory { get; private set; }
+        public static Native._VirtualAllocEx VirtualAllocEx { get; private set; }
+        public static Native._OpenThread OpenThread { get; private set; }
+        public static Native._SuspendThread SuspendThread { get; private set; }
+        public static Native._GetThreadContext GetThreadContext { get; private set; }
+        public static Native._SetThreadContext SetThreadContext { get; private set; }
+        public static Native._ResumeThread ResumeThread { get; private set; }
         private static void StealthUpdate()
         {
             if(Stealth == NativeStealthType.ManualInvoke)
             {
                 WriteProcessMemory = Native.WriteProcessMemoryM;
                 ReadProcessMemory = Native.ReadProcessMemoryM;
+                VirtualAllocEx = Native.VirtualAllocExM;
+                OpenThread = Native.OpenThreadM;
+                SuspendThread = Native.SuspendThreadM;
+                GetThreadContext = Native.GetThreadContextM;
+                SetThreadContext = Native.SetThreadContextM;
+                ResumeThread = Native.ResumeThreadM;
             }
             else
             {
 #if USE_PINVOKE
                 WriteProcessMemory = Native.WriteProcessMemoryP;
                 ReadProcessMemory = Native.ReadProcessMemoryP;
+                VirtualAllocEx = Native.VirtualAllocExP;
+                OpenThread = Native.OpenThreadP;
+                SuspendThread = Native.SuspendThreadP;
+                GetThreadContext = Native.GetThreadContextP;
+                SetThreadContext = Native.SetThreadContextP;
+                ResumeThread = Native.ResumeThreadP;
 #else
                 WriteProcessMemory = Native.WriteProcessMemoryD;
                 ReadProcessMemory = Native.ReadProcessMemoryD;
+                VirtualAllocEx = Native.VirtualAllocExD;
+                OpenThread = Native.OpenThreadD;
+                SuspendThread = Native.SuspendThreadD;
+                GetThreadContext = Native.GetThreadContextD;
+                SetThreadContext = Native.SetThreadContextD;
+                ResumeThread = Native.ResumeThreadD;
 #endif
             }
         }
@@ -977,7 +1196,7 @@ namespace System
         DInvoke,
 #endif
         /// <summary>
-        /// Use manual mapped instances of all dlls for function invocation. May be used regardless of USE_PINVOKE
+        /// Use manual mapped instances of all dlls for function invocation. May be used regardless of USE_PINVOKE.
         /// </summary>
         ManualInvoke
     }

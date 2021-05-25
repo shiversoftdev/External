@@ -78,23 +78,5 @@ namespace System.ExThreads
         protected abstract bool GetContext(PointerEx thread, PointerEx context);
 
         public abstract PointerEx InstructionPointer { get; set; }
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern PointerEx OpenThread(int dwDesiredAccess, bool bInheritHandle, int dwThreadId);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern PointerEx SuspendThread(PointerEx hThread);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool GetThreadContext(IntPtr hThread, IntPtr lpContext);
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool Wow64GetThreadContext(IntPtr hThread, IntPtr lpContext);
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool SetThreadContext(IntPtr hThread, IntPtr lpContext);
-        [DllImport("kernel32", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
-        public static extern bool Wow64SetThreadContext(IntPtr hThread, IntPtr lpContext);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern uint ResumeThread(PointerEx hThread);
     }
 }

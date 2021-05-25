@@ -54,22 +54,6 @@ namespace System
             internal ushort wProcessorRevision;
         }
 
-        [Flags]
-        public enum MemoryProtection
-        {
-            Execute = 0x10,
-            ExecuteRead = 0x20,
-            ExecuteReadWrite = 0x40,
-            ExecuteWriteCopy = 0x80,
-            NoAccess = 0x01,
-            ReadOnly = 0x02,
-            ReadWrite = 0x04,
-            WriteCopy = 0x08,
-            GuardModifierflag = 0x100,
-            NoCacheModifierflag = 0x200,
-            WriteCombineModifierflag = 0x400
-        }
-
         public struct MEMORY_BASIC_INFORMATION
         {
             public PointerEx BaseAddress;
@@ -100,12 +84,6 @@ namespace System
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern PointerEx VirtualQueryEx(PointerEx hProcess, PointerEx lpAddress, out MEMORY_BASIC_INFORMATION lpBuffer, uint dwLength);
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool VirtualAlloc2(PointerEx hProcess, PointerEx lpBaseAddress, int RegionSize, ulong AllocType, ulong PageProtection);
-
-        [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
-        public static extern PointerEx VirtualAllocEx(PointerEx hProcess, PointerEx lpAddress, uint dwSize, Native.AllocationType flAllocationType, MemoryProtection flProtect);
-
         [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
         public static extern bool VirtualFreeEx(PointerEx hProcess, PointerEx lpAddress, uint dwSize, int dwFreeType);
 
@@ -114,9 +92,6 @@ namespace System
 
         [DllImport("kernel32.dll", SetLastError = true)]
         internal static extern bool IsWow64Process(PointerEx processHandle, out bool isWow64Process);
-
-        [DllImport("kernel32.dll")]
-        internal static extern PointerEx CreateRemoteThread(PointerEx hProcess, PointerEx lpThreadAttributes, uint dwStackSize, PointerEx lpStartAddress, PointerEx lpParameter, uint dwCreationFlags, out PointerEx lpThreadId);
         #endregion
 
         #region methods
@@ -574,14 +549,14 @@ namespace System
 
                 lock (__hijackMutexTable[BaseProcess.Id])
                 {
-                    PointerEx hThread = ThreadContextEx.OpenThread((int)ThreadAccess.THREAD_HIJACK, false, targetThread.Id);
+                    PointerEx hThread = NativeStealth.OpenThread((int)ThreadAccess.THREAD_HIJACK, false, targetThread.Id);
 
                     if (!hThread)
                     {
                         throw new Exception("Unable to open target thread for RPC...");
                     }
 
-                    ThreadContextEx.SuspendThread(hThread);
+                    NativeStealth.SuspendThread(hThread);
 
                     if(GetArchitecture() == Architecture.X86)
                     {
@@ -608,7 +583,7 @@ namespace System
                         ctx64.SetContext(hThread);
                     }
 
-                    ThreadContextEx.ResumeThread(hThread);
+                    NativeStealth.ResumeThread(hThread);
                     CloseHandle(hThread);
                 }
 
@@ -671,7 +646,7 @@ namespace System
         public PointerEx QuickAlloc(PointerEx size_region, bool Executable = false)
         {
             if (!Handle) throw new InvalidOperationException("Tried to allocate a memory region when a handle to the desired process doesn't exist");
-            return VirtualAllocEx(Handle, 0, size_region, Native.AllocationType.Commit, Executable ? MemoryProtection.ExecuteReadWrite : MemoryProtection.ReadWrite);
+            return NativeStealth.VirtualAllocEx(Handle, 0, size_region, Native.AllocationType.Commit, Executable ? Native.MemoryProtection.ExecuteReadWrite : Native.MemoryProtection.ReadWrite);
         }
 
         /// <summary>

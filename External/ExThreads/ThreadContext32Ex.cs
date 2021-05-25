@@ -100,12 +100,12 @@ namespace System.ExThreads
 
         protected override bool SetContext(PointerEx thread, PointerEx context)
         {
-            return SetThreadContext(thread, context);
+            return NativeStealth.SetThreadContext(thread, context);
         }
 
         protected override bool GetContext(PointerEx thread, PointerEx context)
         {
-            return GetThreadContext(thread, context);
+            return NativeStealth.GetThreadContext(thread, context);
         }
     }
 }

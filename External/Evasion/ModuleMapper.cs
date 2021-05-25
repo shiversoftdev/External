@@ -393,7 +393,8 @@ namespace System.Evasion
                     if ((DllName.StartsWith("api-") || DllName.StartsWith("ext-")))
                     {
                         // for some reason, Lunar's resolve apiset is 1000x better than the dictionary setup done in dinvoke, so we will just use that.
-                        if((dll_resolved = EnvironmentEx.ResolveAPISet(DllName)) == null)
+                        // lmfao: https://github.com/cobbr/SharpSploit/issues/58
+                        if ((dll_resolved = EnvironmentEx.ResolveAPISet(DllName)) == null)
                         {
                             throw new Exception("api dll was not resolved");
                         }
