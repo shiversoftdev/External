@@ -901,6 +901,43 @@ namespace System
             return (PointerEx)Evasion.DInvoke.ManualInvoke(CONST_KERNEL32, @"VirtualAllocEx", typeof(_VirtualAllocEx), ref funcArgs);
         }
         #endregion
+
+        #region VirtualProtectEx
+#if USE_PINVOKE
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool VirtualProtectEx(IntPtr processHandle, IntPtr address, int size, int protectionType, out int oldProtectionType);
+        public static bool VirtualProtectExP(IntPtr processHandle, IntPtr address, int size, int protectionType, out int oldProtectionType)
+        {
+            return VirtualProtectEx(processHandle, address, size, protectionType, out oldProtectionType);
+        }
+#else
+        public static bool VirtualProtectExD(IntPtr processHandle, IntPtr address, int size, int protectionType, out int oldProtectionType)
+        {
+            oldProtectionType = 0;
+            object[] funcArgs =
+            {
+                processHandle, address, size, protectionType, oldProtectionType
+            };
+            bool result = (bool)Evasion.DInvoke.DynamicAPIInvoke(CONST_KERNEL32, "VirtualProtectEx", typeof(_VirtualProtectEx), ref funcArgs);
+            oldProtectionType = (int)funcArgs[funcArgs.Length - 1];
+            return result;
+        }
+#endif
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate bool _VirtualProtectEx(IntPtr processHandle, IntPtr address, int size, int protectionType, out int oldProtectionType);
+        public static bool VirtualProtectExM(IntPtr processHandle, IntPtr address, int size, int protectionType, out int oldProtectionType)
+        {
+            oldProtectionType = 0;
+            object[] funcArgs =
+            {
+                processHandle, address, size, protectionType, oldProtectionType
+            };
+            bool result = (bool)Evasion.DInvoke.ManualInvoke(CONST_KERNEL32, "VirtualProtectEx", typeof(_VirtualProtectEx), ref funcArgs);
+            oldProtectionType = (int)funcArgs[funcArgs.Length - 1];
+            return result;
+        }
+        #endregion
+
         #endregion
         #region thread
 
@@ -934,9 +971,9 @@ namespace System
 
             return (PointerEx)Evasion.DInvoke.ManualInvoke(CONST_KERNEL32, "OpenThread", typeof(_OpenThread), ref funcArgs);
         }
-        #endregion
+#endregion
 
-        #region SuspendThread
+#region SuspendThread
 #if USE_PINVOKE
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern PointerEx SuspendThread(PointerEx hThread);
@@ -964,9 +1001,9 @@ namespace System
             };
             return (PointerEx)Evasion.DInvoke.ManualInvoke(CONST_KERNEL32, "SuspendThread", typeof(_SuspendThread), ref funcArgs);
         }
-        #endregion
+#endregion
 
-        #region GetThreadContext
+#region GetThreadContext
 #if USE_PINVOKE
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool GetThreadContext(IntPtr hThread, IntPtr lpContext);
@@ -994,9 +1031,9 @@ namespace System
             };
             return (bool)Evasion.DInvoke.ManualInvoke(CONST_KERNEL32, "GetThreadContext", typeof(_GetThreadContext), ref funcArgs);
         }
-        #endregion
+#endregion
 
-        #region SetThreadContext
+#region SetThreadContext
 #if USE_PINVOKE
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool SetThreadContext(IntPtr hThread, IntPtr lpContext);
@@ -1024,9 +1061,9 @@ namespace System
             };
             return (bool)Evasion.DInvoke.ManualInvoke(CONST_KERNEL32, "SetThreadContext", typeof(_SetThreadContext), ref funcArgs);
         }
-        #endregion
+#endregion
 
-        #region ResumeThread
+#region ResumeThread
 #if USE_PINVOKE
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern uint ResumeThread(PointerEx hThread);
@@ -1048,13 +1085,13 @@ namespace System
             object[] funcArgs = new object[] { hThread };
             return (uint)Evasion.DInvoke.ManualInvoke(CONST_KERNEL32, "ResumeThread", typeof(_ResumeThread), ref funcArgs);
         }
-        #endregion
+#endregion
 
-        #endregion
-        #endregion
-        #endregion
+#endregion
+#endregion
+#endregion
 
-        #region DInvoke Internal Registry
+#region DInvoke Internal Registry
         private struct DELEGATES
         {
             [UnmanagedFunctionPointer(CallingConvention.StdCall)]
@@ -1128,11 +1165,13 @@ namespace System
         public static Native._WriteProcessMemory WriteProcessMemory { get; private set; }
         public static Native._ReadProcessMemory ReadProcessMemory { get; private set; }
         public static Native._VirtualAllocEx VirtualAllocEx { get; private set; }
+        public static Native._VirtualProtectEx VirtualProtectEx { get; private set; }
         public static Native._OpenThread OpenThread { get; private set; }
         public static Native._SuspendThread SuspendThread { get; private set; }
         public static Native._GetThreadContext GetThreadContext { get; private set; }
         public static Native._SetThreadContext SetThreadContext { get; private set; }
         public static Native._ResumeThread ResumeThread { get; private set; }
+        
         private static void StealthUpdate()
         {
             if(Stealth == NativeStealthType.ManualInvoke)
@@ -1140,6 +1179,7 @@ namespace System
                 WriteProcessMemory = Native.WriteProcessMemoryM;
                 ReadProcessMemory = Native.ReadProcessMemoryM;
                 VirtualAllocEx = Native.VirtualAllocExM;
+                VirtualProtectEx = Native.VirtualProtectExM;
                 OpenThread = Native.OpenThreadM;
                 SuspendThread = Native.SuspendThreadM;
                 GetThreadContext = Native.GetThreadContextM;
@@ -1152,6 +1192,7 @@ namespace System
                 WriteProcessMemory = Native.WriteProcessMemoryP;
                 ReadProcessMemory = Native.ReadProcessMemoryP;
                 VirtualAllocEx = Native.VirtualAllocExP;
+                VirtualProtectEx = Native.VirtualProtectExP;
                 OpenThread = Native.OpenThreadP;
                 SuspendThread = Native.SuspendThreadP;
                 GetThreadContext = Native.GetThreadContextP;
@@ -1161,6 +1202,7 @@ namespace System
                 WriteProcessMemory = Native.WriteProcessMemoryD;
                 ReadProcessMemory = Native.ReadProcessMemoryD;
                 VirtualAllocEx = Native.VirtualAllocExD;
+                VirtualProtectEx = Native.VirtualProtectExD;
                 OpenThread = Native.OpenThreadD;
                 SuspendThread = Native.SuspendThreadD;
                 GetThreadContext = Native.GetThreadContextD;

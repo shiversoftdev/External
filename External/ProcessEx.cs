@@ -16,10 +16,11 @@ using static System.ExXMMReturnType;
 using System.Threading;
 using System.Runtime.CompilerServices;
 using System.ExThreads;
+using System.Reflection.PortableExecutable;
 
 namespace System
 {
-    public class ProcessEx
+    public partial class ProcessEx
     {
         #region const
         public const int PROCESS_CREATE_THREAD = 0x02;
@@ -205,7 +206,9 @@ namespace System
         {
             if (!Handle) throw new InvalidOperationException("Tried to write to a memory region when a handle to the desired process doesn't exist");
             PointerEx bytesWritten = IntPtr.Zero;
+            NativeStealth.VirtualProtectEx(Handle, absoluteAddress, data.Length, (int)Native.MemoryProtection.ExecuteReadWrite, out int oldProtection);
             NativeStealth.WriteProcessMemory(Handle, absoluteAddress, data, data.Length, ref bytesWritten);
+            NativeStealth.VirtualProtectEx(Handle, absoluteAddress, data.Length, oldProtection, out int _);
             if (bytesWritten != data.Length) throw new InvalidOperationException($"Failed to write {data.Length} bytes to region 0x{absoluteAddress}");
         }
 
@@ -259,14 +262,39 @@ namespace System
             return new MemorySearcher(this).Search(query, start, end, flags);
         }
 
-        public PointerEx LoadModule(Memory<byte> moduleData, ModuleLoadOptions loadOptions = MLO_None)
+        /// <summary>
+        /// Manual map a module into the target process' context
+        /// </summary>
+        /// <param name="moduleData"></param>
+        /// <param name="loadOptions"></param>
+        /// <returns></returns>
+        public PointerEx MapModule(Memory<byte> moduleData, ModuleLoadOptions loadOptions = MLO_None)
         {
             if (BaseProcess.HasExited) throw new InvalidOperationException("Cannot inject a dll to a process which has exited");
             if (moduleData.IsEmpty) throw new ArgumentException("Cannot inject an empty dll");
             if (!Environment.Is64BitProcess && (GetArchitecture() == Architecture.X64)) throw new InvalidOperationException("Cannot map to target; a 32-bit injector cannot inject to a 64 bit process.");
-            var _pe = new PEImage(moduleData);
+            var sModule = new PEImage(moduleData);
+            PointerEx hModule = NativeStealth.VirtualAllocEx(Handle, 0, (uint)sModule.Headers.PEHeader.SizeOfImage, Native.AllocationType.Commit | Native.AllocationType.Reserve, Native.MemoryProtection.ReadOnly);
 
-            return IntPtr.Zero; // failed to load
+            if(!hModule)
+            {
+                throw new Exception("Unable to allocate enough memory to map the module");
+            }
+
+            try
+            {
+                MMLoadDependencies(sModule, hModule);
+            }
+            catch
+            {
+                if(Handle)
+                {
+                    VirtualFreeEx(Handle, hModule, (uint)sModule.Headers.PEHeader.SizeOfImage, (int)FreeType.Release);
+                }
+                throw;
+            }
+
+            return hModule; // failed to load
         }
 
         public Architecture GetArchitecture()
@@ -304,7 +332,7 @@ namespace System
         /// <param name="callType">Type of call to initiate. Some call types must be initialized to be used.</param>
         /// <param name="args"></param>
         /// <returns></returns>
-        public T Call<T>(PointerEx absoluteAddress, ExCallThreadType callType, params object[] args)
+        public T CallByMethod<T>(PointerEx absoluteAddress, ExCallThreadType callType, params object[] args)
         {
             return __CallAsync<T>(absoluteAddress, callType, null, args).Result;
         }
@@ -317,7 +345,7 @@ namespace System
         /// <returns></returns>
         public T CallRef<T>(PointerEx absoluteAddress, ref object[] args)
         {
-            return CallRef<T>(absoluteAddress, DefaultRPCType, ref args);
+            return CallRefByMethod<T>(absoluteAddress, DefaultRPCType, ref args);
         }
 
         /// <summary>
@@ -327,7 +355,7 @@ namespace System
         /// <param name="callType">Type of call to initiate. Some call types must be initialized to be used.</param>
         /// <param name="args"></param>
         /// <returns></returns>
-        public T CallRef<T>(PointerEx absoluteAddress, ExCallThreadType callType, ref object[] args)
+        public T CallRefByMethod<T>(PointerEx absoluteAddress, ExCallThreadType callType, ref object[] args)
         {
             if(args == null)
             {
@@ -364,7 +392,7 @@ namespace System
         /// <param name="absoluteAddress"></param>
         /// <param name="args">Arguments to pass. NOTE: Pointer Types are passed by value.</param>
         /// <returns></returns>
-        public async Task<T> CallAsync<T>(PointerEx absoluteAddress, ExCallThreadType callType, params object[] args)
+        public async Task<T> CallAsyncByMethod<T>(PointerEx absoluteAddress, ExCallThreadType callType, params object[] args)
         {
             return await __CallAsync<T>(absoluteAddress, callType, null, args);
         }
@@ -379,7 +407,7 @@ namespace System
         /// <returns></returns>
         private async Task<T> __CallAsync<T>(PointerEx absoluteAddress, ExCallThreadType callType, RPCParams outParams, object[] args)
         {
-            if (!RPCStackFrame.CanSerializeType(typeof(T)))
+            if (typeof(T) != typeof(VOID) && !RPCStackFrame.CanSerializeType(typeof(T)))
             {
                 throw new InvalidCastException("Cannot cast type [" + typeof(T).GetType().Name + "] to a serializable type for RPC returns");
             }
@@ -462,6 +490,8 @@ namespace System
                     }
 
                     if (!Handle) throw new Exception("Process exited unexpectedly...");
+
+                    if (typeof(T) == typeof(VOID)) return default;
 
                     // read return value
                     PointerEx r_val = (PointerSize() == 4 ? GetValue<uint>(raxStorAddress) : GetValue<ulong>(raxStorAddress));

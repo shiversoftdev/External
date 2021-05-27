@@ -127,4 +127,12 @@ namespace System
         }
         #endregion
     }
+
+    /// <summary>
+    /// A dummy type to signal that no return deserialization is needed for a call.
+    /// </summary>
+    public struct VOID
+    {
+        private PointerEx __value;
+    }
 }
