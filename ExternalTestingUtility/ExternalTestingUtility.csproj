@@ -80,6 +80,27 @@
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="UI\Core\Controls\CBorderedForm.Designer.cs" />
+    <Compile Include="UI\Core\Controls\CComboBox.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="UI\Core\Controls\CComboDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UI\Core\Controls\CComboDialog.Designer.cs">
+      <DependentUpon>CComboDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Core\Controls\CErrorDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UI\Core\Controls\CErrorDialog.Designer.cs">
+      <DependentUpon>CErrorDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Core\Controls\CThemedTextbox.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="UI\Core\Controls\CThemedTextbox.Designer.cs">
+      <DependentUpon>CThemedTextbox.cs</DependentUpon>
+    </Compile>
     <Compile Include="UI\Core\Controls\CTitleBar.cs">
       <SubType>UserControl</SubType>
     </Compile>
@@ -100,6 +121,12 @@
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
     <EmbeddedResource Include="UI\Core\Controls\CBorderedForm.resx" />
+    <EmbeddedResource Include="UI\Core\Controls\CComboDialog.resx">
+      <DependentUpon>CComboDialog.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="UI\Core\Controls\CErrorDialog.resx">
+      <DependentUpon>CErrorDialog.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="UI\Core\Controls\CTitleBar.resx" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>

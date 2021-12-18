@@ -7,12 +7,12 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using static System.PEStructures.PE;
-
+using static System.EnvironmentEx;
 namespace System.Evasion
 {
     public static class ModuleMapper
     {
-        private static Dictionary<string, PE_MANUAL_MAP> MappedModulesCache = new Dictionary<string, PE_MANUAL_MAP>();
+        private static readonly Dictionary<string, PE_MANUAL_MAP> MappedModulesCache = new Dictionary<string, PE_MANUAL_MAP>();
 
         internal static class ModuleConst
         {
@@ -20,7 +20,7 @@ namespace System.Evasion
 
             private static string ToSysDLL(string relPath)
             {
-                return Path.Combine(Environment.GetFolderPath(Environment.Is64BitProcess ? Environment.SpecialFolder.System : Environment.SpecialFolder.SystemX86), relPath);
+                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), relPath);
             }
         }
 
@@ -33,13 +33,13 @@ namespace System.Evasion
         /// <returns>PE_MANUAL_MAP object</returns>
         public static PE_MANUAL_MAP MapModuleToMemory(string modulePath, bool noCache = false)
         {
-            if(modulePath == null)
+            if (modulePath == null)
             {
-                throw new ArgumentException(nameof(modulePath) + " cannot be null.");
+                throw new Exception(DSTR(DSTR_DINVOKE_MOD_CANNOT_BE_NULL));
             }
 
             modulePath = modulePath.ToLower();
-            if(!noCache && MappedModulesCache.ContainsKey(modulePath))
+            if (!noCache && MappedModulesCache.ContainsKey(modulePath))
             {
                 return MappedModulesCache[modulePath];
             }
@@ -66,7 +66,7 @@ namespace System.Evasion
             if ((PEINFO.Is32Bit && IntPtr.Size == 8) || (!PEINFO.Is32Bit && IntPtr.Size == 4))
             {
                 Marshal.FreeHGlobal(pModule);
-                throw new InvalidOperationException("The module architecture does not match the process architecture.");
+                throw new Exception(DSTR(DSTR_MOD_ARCHITECTURE_WRONG));
             }
 
             // Alloc PE image memory -> RW
@@ -96,16 +96,18 @@ namespace System.Evasion
                 hModule = LoadModuleFromDisk(DLLName);
                 if (hModule == IntPtr.Zero)
                 {
-                    throw new FileNotFoundException(DLLName + ", unable to find the specified file.");
+                    throw new Exception(DSTR(DSTR_MODULE_FILE_NOT_FOUND, DLLName));
                 }
             }
             else if (hModule == IntPtr.Zero)
             {
-                throw new DllNotFoundException(DLLName + ", Dll was not found.");
+                throw new Exception(DSTR(DSTR_MODULE_FILE_NOT_FOUND, DLLName));
             }
 
             return GetExportAddress(hModule, FunctionName);
         }
+
+        private static Dictionary<string, PointerEx> cached_lookups = new Dictionary<string, PointerEx>();
 
         /// <summary>
         /// Helper for getting the base address of a module loaded by the current process. This base
@@ -117,14 +119,20 @@ namespace System.Evasion
         /// <returns>IntPtr base address of the loaded module or IntPtr.Zero if the module is not found.</returns>
         public static IntPtr GetLoadedModuleAddress(string DLLName)
         {
+            if(cached_lookups.ContainsKey(DLLName))
+            {
+                return cached_lookups[DLLName];
+            }
+
             ProcessModuleCollection ProcModules = Process.GetCurrentProcess().Modules;
             foreach (ProcessModule Mod in ProcModules)
             {
                 if (Mod.FileName.ToLower().EndsWith(DLLName.ToLower()))
                 {
-                    return Mod.BaseAddress;
+                    return cached_lookups[DLLName] = Mod.BaseAddress;
                 }
             }
+
             return IntPtr.Zero;
         }
 
@@ -201,13 +209,13 @@ namespace System.Evasion
             catch
             {
                 // Catch parser failure
-                throw new InvalidOperationException("Failed to parse module exports.");
+                throw new Exception(DSTR(DSTR_MOD_EXPORTS_BAD));
             }
 
             if (FunctionPtr == IntPtr.Zero)
             {
                 // Export not found
-                throw new MissingMethodException(ExportName + ", export not found.");
+                throw new Exception(DSTR(DSTR_EXPORT_NOT_FOUND, ExportName));
             }
             return FunctionPtr;
         }
@@ -216,54 +224,55 @@ namespace System.Evasion
         /// Manually map module into current process.
         /// </summary>
         /// <author>Ruben Boonen (@FuzzySec)</author>
-        /// <param name="pModule">Pointer to the module base.</param>
-        /// <param name="pImage">Pointer to the PEINFO image.</param>
+        /// <param name="rawModule">Pointer to the module base.</param>
+        /// <param name="allocatedModule">Pointer to the PEINFO image.</param>
         /// <param name="PEINFO">PE_META_DATA of the module being mapped.</param>
         /// <returns>PE_MANUAL_MAP object</returns>
-        private static PE_MANUAL_MAP MapModuleToMemory(IntPtr pModule, IntPtr pImage, PE_META_DATA PEINFO)
+        private static PE_MANUAL_MAP MapModuleToMemory(IntPtr rawModule, IntPtr allocatedModule, PE_META_DATA PEINFO)
         {
             // Check module matches the process architecture
             if ((PEINFO.Is32Bit && IntPtr.Size == 8) || (!PEINFO.Is32Bit && IntPtr.Size == 4))
             {
-                Marshal.FreeHGlobal(pModule);
-                throw new InvalidOperationException("The module architecture does not match the process architecture.");
+                Marshal.FreeHGlobal(rawModule);
+                throw new Exception(DSTR(DSTR_MOD_ARCHITECTURE_WRONG));
             }
 
             // Write PE header to memory
             UInt32 SizeOfHeaders = PEINFO.Is32Bit ? PEINFO.OptHeader32.SizeOfHeaders : PEINFO.OptHeader64.SizeOfHeaders;
-            UInt32 BytesWritten = Native.NtWriteVirtualMemoryD((IntPtr)(-1), pImage, pModule, SizeOfHeaders);
+            UInt32 BytesWritten;
+            Native.NtWriteVirtualMemoryD((IntPtr)(-1), allocatedModule, rawModule, SizeOfHeaders);
 
             // Write sections to memory
             foreach (IMAGE_SECTION_HEADER ish in PEINFO.Sections)
             {
                 // Calculate offsets
-                IntPtr pVirtualSectionBase = (IntPtr)((UInt64)pImage + ish.VirtualAddress);
-                IntPtr pRawSectionBase = (IntPtr)((UInt64)pModule + ish.PointerToRawData);
+                IntPtr pVirtualSectionBase = (IntPtr)((UInt64)allocatedModule + ish.VirtualAddress);
+                IntPtr pRawSectionBase = (IntPtr)((UInt64)rawModule + ish.PointerToRawData);
 
                 // Write data
                 BytesWritten = Native.NtWriteVirtualMemoryD((IntPtr)(-1), pVirtualSectionBase, pRawSectionBase, ish.SizeOfRawData);
                 if (BytesWritten != ish.SizeOfRawData)
                 {
-                    throw new InvalidOperationException("Failed to write to memory.");
+                    throw new Exception(DSTR(DSTR_FAILED_MEMORY_WRITE));
                 }
             }
 
             // Perform relocations
-            RelocateModule(PEINFO, pImage);
+            RelocateModule(PEINFO, allocatedModule);
 
             // Rewrite IAT
-            RewriteModuleIAT(PEINFO, pImage);
+            RewriteModuleIAT(PEINFO, allocatedModule);
 
             // Set memory protections
-            SetModuleSectionPermissions(PEINFO, pImage);
+            SetModuleSectionPermissions(PEINFO, allocatedModule);
 
             // Free temp HGlobal
-            Marshal.FreeHGlobal(pModule);
+            Marshal.FreeHGlobal(rawModule);
 
             // Prepare return object
             PE_MANUAL_MAP ManMapObject = new PE_MANUAL_MAP
             {
-                ModuleBase = pImage,
+                ModuleBase = allocatedModule,
                 PEINFO = PEINFO
             };
 
@@ -289,7 +298,7 @@ namespace System.Evasion
             // Loop reloc blocks
             while (nextRelocTableBlock != 0)
             {
-                IMAGE_BASE_RELOCATION ibr = new IMAGE_BASE_RELOCATION();
+                IMAGE_BASE_RELOCATION ibr;
                 ibr = (IMAGE_BASE_RELOCATION)Marshal.PtrToStructure(pRelocTable, typeof(IMAGE_BASE_RELOCATION));
 
                 Int64 RelocCount = ((ibr.SizeOfBlock - Marshal.SizeOf(ibr)) / 2);
@@ -324,7 +333,7 @@ namespace System.Evasion
                         }
                         catch
                         {
-                            throw new InvalidOperationException("Memory access violation.");
+                            throw new Exception(DSTR(DSTR_MEM_ACCESS_VIOLATION));
                         }
                     }
                 }
@@ -361,7 +370,7 @@ namespace System.Evasion
             Native.RtlGetVersionD(ref OSVersion);
             if (OSVersion.MajorVersion < 10)
             {
-                throw new Exception("OS Major Version must be >= 10");
+                throw new Exception(DSTR(DSTR_OS_VERSION_TOO_OLD));
             }
 
             // Loop IID's
@@ -384,7 +393,7 @@ namespace System.Evasion
                 // Loop imports
                 if (DllName == string.Empty)
                 {
-                    throw new InvalidOperationException("Failed to read DLL name.");
+                    throw new Exception(DSTR(DSTR_MODULE_NAME_INVALID));
                 }
                 else
                 {
@@ -396,7 +405,7 @@ namespace System.Evasion
                         // lmfao: https://github.com/cobbr/SharpSploit/issues/58
                         if ((dll_resolved = EnvironmentEx.ResolveAPISet(DllName)) == null)
                         {
-                            throw new Exception("api dll was not resolved");
+                            throw new Exception(DSTR(DSTR_API_DLL_UNRESOLVED, DllName));
                         }
                         // Not all API set DLL's have a registered host mapping
                         DllName = dll_resolved;
@@ -409,14 +418,14 @@ namespace System.Evasion
                         hModule = LoadModuleFromDisk(DllName);
                         if (hModule == IntPtr.Zero)
                         {
-                            throw new FileNotFoundException(DllName + ", unable to find the specified file.");
+                            throw new Exception(DSTR(DSTR_MODULE_FILE_NOT_FOUND, DllName));
                         }
                     }
 
                     // Loop thunks
                     if (PEINFO.Is32Bit)
                     {
-                        IMAGE_THUNK_DATA32 oft_itd = new IMAGE_THUNK_DATA32();
+                        IMAGE_THUNK_DATA32 oft_itd;
                         for (int i = 0; true; i++)
                         {
                             oft_itd = (IMAGE_THUNK_DATA32)Marshal.PtrToStructure((IntPtr)((UInt64)ModuleMemoryBase + iid.OriginalFirstThunk + (UInt32)(i * (sizeof(UInt32)))), typeof(IMAGE_THUNK_DATA32));
@@ -429,7 +438,7 @@ namespace System.Evasion
                             if (oft_itd.AddressOfData < 0x80000000) // !IMAGE_ORDINAL_FLAG32
                             {
                                 IntPtr pImpByName = (IntPtr)((UInt64)ModuleMemoryBase + oft_itd.AddressOfData + sizeof(UInt16));
-                                IntPtr pFunc = IntPtr.Zero;
+                                IntPtr pFunc;
                                 pFunc = GetNativeExportAddress(hModule, Marshal.PtrToStringAnsi(pImpByName));
 
                                 // Write ProcAddress
@@ -438,7 +447,7 @@ namespace System.Evasion
                             else
                             {
                                 ulong fOrdinal = oft_itd.AddressOfData & 0xFFFF;
-                                IntPtr pFunc = IntPtr.Zero;
+                                IntPtr pFunc;
                                 pFunc = GetNativeExportAddress(hModule, (short)fOrdinal);
 
                                 // Write ProcAddress
@@ -448,7 +457,7 @@ namespace System.Evasion
                     }
                     else
                     {
-                        IMAGE_THUNK_DATA64 oft_itd = new IMAGE_THUNK_DATA64();
+                        IMAGE_THUNK_DATA64 oft_itd;
                         for (int i = 0; true; i++)
                         {
                             oft_itd = (IMAGE_THUNK_DATA64)Marshal.PtrToStructure((IntPtr)((UInt64)ModuleMemoryBase + iid.OriginalFirstThunk + (UInt64)(i * (sizeof(UInt64)))), typeof(IMAGE_THUNK_DATA64));
@@ -461,7 +470,7 @@ namespace System.Evasion
                             if (oft_itd.AddressOfData < 0x8000000000000000) // !IMAGE_ORDINAL_FLAG64
                             {
                                 IntPtr pImpByName = (IntPtr)((UInt64)ModuleMemoryBase + oft_itd.AddressOfData + sizeof(UInt16));
-                                IntPtr pFunc = IntPtr.Zero;
+                                IntPtr pFunc;
                                 pFunc = GetNativeExportAddress(hModule, Marshal.PtrToStringAnsi(pImpByName));
 
                                 // Write pointer
@@ -470,7 +479,7 @@ namespace System.Evasion
                             else
                             {
                                 ulong fOrdinal = oft_itd.AddressOfData & 0xFFFF;
-                                IntPtr pFunc = IntPtr.Zero;
+                                IntPtr pFunc;
                                 pFunc = GetNativeExportAddress(hModule, (short)fOrdinal);
 
                                 // Write pointer
@@ -529,7 +538,7 @@ namespace System.Evasion
                 }
                 else
                 {
-                    throw new InvalidOperationException("Unknown section flag, " + ish.Characteristics);
+                    throw new Exception(DSTR(DSTR_UNK_SEC_FLAG, ish.Characteristics));
                 }
 
                 // Calculate base

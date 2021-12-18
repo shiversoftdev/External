@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static System.EnvironmentEx;
 
 namespace System
 {
@@ -25,7 +26,9 @@ namespace System
         private static byte[] CreateRemoteCall64(PointerEx jumpLocation, PointerEx[] args, PointerEx raxStorAddress, PointerEx threadStateAddress, byte xmmMask, ExXMMReturnType xmmReturnType)
         {
             if (!raxStorAddress)
-                throw new InvalidOperationException("Unable to execute a 64 bit function without RAXStor");
+            {
+                throw new Exception(DSTR(DSTR_RAXSTOR_MISSING));
+            }
 
             List<byte> data = new List<byte>();
 
@@ -286,16 +289,19 @@ namespace System
 
         internal static byte[] CreateThreadIntercept32(PointerEx jumpTo, PointerEx originalIP)
         {
-            List<byte> data = new List<byte>();
+            List<byte> data = new List<byte>
+            {
 
-            // pusha
-            data.Add(0x60);
+                // pusha
+                0x60,
 
-            // pushf
-            data.Add(0x9c);
+                // pushf
+                0x9c,
 
-            // mov eax, jumpTo
-            data.Add(0xb8);
+                // mov eax, jumpTo
+                0xb8
+            };
+
             data.AddRange(BitConverter.GetBytes((int)jumpTo));
 
             // call eax

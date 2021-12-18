@@ -70,6 +70,23 @@ namespace System
         }
 
         /// <summary>
+        /// Converts an array of structs to a byte array
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="a_s"></param>
+        /// <returns></returns>
+        public static byte[] ToByteArray<T>(this T[] a_s) where T : struct
+        {
+            int size = Marshal.SizeOf(typeof(T));
+            byte[] data = new byte[a_s.Length * size];
+            for(int i = 0; i < a_s.Length; i++)
+            {
+                a_s[i].ToByteArray().CopyTo(data, i * size);
+            }
+            return data;
+        }
+
+        /// <summary>
         /// Converts a struct to a byte array, but promises that the generic constraint is met by the programmer, not the compiler.
         /// </summary>
         /// <typeparam name="T"></typeparam>

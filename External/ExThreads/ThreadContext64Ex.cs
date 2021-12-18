@@ -138,6 +138,11 @@ namespace System.ExThreads
 
         public ThreadContext64Ex(ThreadContextExFlags contextFlags)
         {
+            SetFlags(contextFlags);
+        }
+
+        public void SetFlags(ThreadContextExFlags contextFlags)
+        {
             switch (contextFlags)
             {
                 case ThreadContextExFlags.All:
@@ -157,6 +162,27 @@ namespace System.ExThreads
         protected override bool GetContext(PointerEx thread, PointerEx context)
         {
             return NativeStealth.GetThreadContext(thread, context);
+        }
+
+        public void SetDebug(PointerEx dr0, PointerEx dr1, PointerEx dr2)
+        {
+            ctx.ContextFlags = CONTEXT64_FLAGS.CONTEXT64_DEBUG_REGISTERS;
+            ctx.Dr7 = 0;
+            if (dr0)
+            {
+                ctx.Dr7 |= 1;
+            }
+            if (dr1)
+            {
+                ctx.Dr7 |= 2;
+            }
+            if (dr2)
+            {
+                ctx.Dr7 |= 4;
+            }
+            ctx.Dr0 = dr0;
+            ctx.Dr1 = dr1;
+            ctx.Dr2 = dr2;
         }
     }
 }

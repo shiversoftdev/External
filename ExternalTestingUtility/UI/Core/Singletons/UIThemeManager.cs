@@ -1,4 +1,5 @@
-﻿using Refract.UI.Core.Interfaces;
+﻿using SMC.UI.Core.Interfaces;
+using SMC.UI.Core.Controls;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -7,7 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace Refract.UI.Core.Singletons
+namespace SMC.UI.Core.Singletons
 {
     internal struct UIThemeInfo
     {
@@ -59,6 +60,7 @@ namespace Refract.UI.Core.Singletons
             if (!(control is Control ctrl)) throw new InvalidOperationException($"Cannot theme control of type '{control.GetType()}' because it is not derived from Control");
             foreach (Control c in control.GetThemedControls())
             {
+                if (c == null) continue;
                 if(c is IThemeableControl themed_c) SetThemeAware(themed_c);
                 else RegisterAndThemeControl(c);
             }
@@ -96,7 +98,15 @@ namespace Refract.UI.Core.Singletons
                 CustomTypeHandlers.Remove(type);
                 return;
             }
-            CustomTypeHandlers[type] = callback;
+
+            if(CustomTypeHandlers.ContainsKey(type))
+            {
+                CustomTypeHandlers[type] += callback;
+            }
+            else
+            {
+                CustomTypeHandlers[type] = callback;
+            }
         }
 
         public static void OnThemeChanged(Control control, ThemeChangedCallback callback)
@@ -130,6 +140,17 @@ namespace Refract.UI.Core.Singletons
                         form.BackColor = CurrentTheme.BackColor;
                         form.ForeColor = CurrentTheme.TextColor;
                         break;
+                    case GroupBox gBox:
+                        gBox.Paint -= ThemedGroupBoxPaint;
+                        gBox.Paint += ThemedGroupBoxPaint;
+                        break;
+                    case CComboBox cBox:
+                        cBox.ForeColor = CurrentTheme.TextColor;
+                        cBox.BackColor = CurrentTheme.BackColor;
+                        cBox.BorderColor = CurrentTheme.AccentColor;
+                        cBox.Cursor = Cursors.Hand;
+                        cBox.FlatStyle = FlatStyle.Flat;
+                        break;
                     case Button button:
                         button.BackColor = CurrentTheme.BackColor;
                         button.FlatAppearance.BorderColor = CurrentTheme.AccentColor;
@@ -140,8 +161,27 @@ namespace Refract.UI.Core.Singletons
                     case Label label:
                         label.ForeColor = CurrentTheme.TextColor;
                         break;
+                    case CThemedTextbox cTextBox:
+                        cTextBox.BackColor = CurrentTheme.BackColor;
+                        cTextBox.ForeColor = CurrentTheme.TextColor;
+                        cTextBox.BorderStyle = BorderStyle.Fixed3D;
+                        cTextBox.BorderColor = CurrentTheme.AccentColor;
+                        break;
+                    case RichTextBox rtb:
+                        rtb.BorderStyle = BorderStyle.None;
+                        rtb.BackColor = CurrentTheme.BackColor;
+                        rtb.ForeColor = CurrentTheme.TextColor;
+                        break;
+                    case TextBox textBox:
+                        textBox.BackColor = CurrentTheme.BackColor;
+                        textBox.ForeColor = CurrentTheme.TextColor;
+                        break;
                     case Panel panel:
                         panel.BackColor = CurrentTheme.BackColor;
+                        break;
+                    case UserControl uControl:
+                        uControl.BackColor = CurrentTheme.BackColor;
+                        uControl.ForeColor = CurrentTheme.TextColor;
                         break;
                     default: throw new NotImplementedException($"Theming procedure for control type: '{control.GetType()}' has not been implemented.");
                 }
@@ -157,6 +197,45 @@ namespace Refract.UI.Core.Singletons
             control.Disposed += ThemedControlDisposed;
             ThemedControls.Add(control);
             ThemeSpecificControl(control);
+        }
+
+        private static void ThemedGroupBoxPaint(object sender, PaintEventArgs e)
+        {
+            GroupBox box = sender as GroupBox;
+            DrawGroupBox(box, e.Graphics, CurrentTheme.TextColor, CurrentTheme.AccentColor, CurrentTheme.BackColor);
+        }
+
+        private static void DrawGroupBox(GroupBox box, Graphics g, Color textColor, Color borderColor, Color backColor)
+        {
+            if (box != null)
+            {
+                Brush textBrush = new SolidBrush(textColor);
+                Brush borderBrush = new SolidBrush(borderColor);
+                Pen borderPen = new Pen(borderBrush);
+                SizeF strSize = g.MeasureString(box.Text, box.Font);
+                Rectangle rect = new Rectangle(box.ClientRectangle.X,
+                                               box.ClientRectangle.Y + (int)(strSize.Height / 2),
+                                               box.ClientRectangle.Width - 1,
+                                               box.ClientRectangle.Height - (int)(strSize.Height / 2) - 1);
+
+                // Clear text and border
+                g.Clear(backColor);
+
+                // Draw text
+                g.DrawString(box.Text, box.Font, textBrush, box.Padding.Left, 0);
+
+                // Drawing Border
+                //Left
+                g.DrawLine(borderPen, rect.Location, new Point(rect.X, rect.Y + rect.Height));
+                //Right
+                g.DrawLine(borderPen, new Point(rect.X + rect.Width, rect.Y), new Point(rect.X + rect.Width, rect.Y + rect.Height));
+                //Bottom
+                g.DrawLine(borderPen, new Point(rect.X, rect.Y + rect.Height), new Point(rect.X + rect.Width, rect.Y + rect.Height));
+                //Top1
+                g.DrawLine(borderPen, new Point(rect.X, rect.Y), new Point(rect.X + box.Padding.Left, rect.Y));
+                //Top2
+                g.DrawLine(borderPen, new Point(rect.X + box.Padding.Left + (int)(strSize.Width), rect.Y), new Point(rect.X + rect.Width, rect.Y));
+            }
         }
     }
 }

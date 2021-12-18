@@ -61,9 +61,23 @@ namespace System
             return px.IntPtr != pxo.IntPtr;
         }
 
+        public override int GetHashCode()
+        {
+            return this;
+        }
+
+        public override bool Equals(object o)
+        {
+            if(o is PointerEx px)
+            {
+                return px == this;
+            }
+            return false;
+        }
+
         public static implicit operator bool(PointerEx px)
         {
-            return px.IntPtr != IntPtr.Zero;
+            return (long)px != 0;
         }
 
         public static implicit operator byte(PointerEx px)
@@ -103,7 +117,7 @@ namespace System
 
         public static implicit operator PointerEx(uint ui)
         {
-            return new IntPtr(ui);
+            return new IntPtr((int)ui);
         }
 
         public static implicit operator PointerEx(long l)
@@ -114,6 +128,16 @@ namespace System
         public static implicit operator PointerEx(ulong ul)
         {
             return new IntPtr((long)ul);
+        }
+
+        public static bool operator true(PointerEx p)
+        {
+            return p;
+        }
+
+        public static bool operator false(PointerEx p)
+        {
+            return !p;
         }
 
         public override string ToString()
@@ -133,6 +157,9 @@ namespace System
     /// </summary>
     public struct VOID
     {
+#pragma warning disable CS0169
+        [Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "Placeholder value to initialize struct size")]
         private PointerEx __value;
+#pragma warning restore CS0169
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static System.EnvironmentEx;
 
 namespace System
 {
@@ -46,12 +47,12 @@ namespace System
 
         public void PushArgument(dynamic obj)
         {
-            if (obj != null && !CanSerializeType(obj.GetType()))
+            if ((obj.GetType().IsValueType || (object)obj != null) && !CanSerializeType(obj.GetType()))
             {
-                throw new InvalidCastException("Cannot cast type [" + obj.GetType().Name + "] to a serializable type for RPC. If this was an array, convert it to a byte array first.");
+                throw new InvalidCastException(DSTR(DSTR_SERIALIZE_TYPE_INVALID, obj.GetType().Name));
             }
 
-            if (obj == null)
+            if (!obj.GetType().IsValueType && obj == null)
             {
                 Arguments.Add(new RPCArgument(new byte[PointerSize]));
                 return;
@@ -102,7 +103,7 @@ namespace System
                 return;
             }
 
-            throw new ArgumentException("Unhandled argument type for serialization: " + obj.GetType().Name);
+            throw new ArgumentException(DSTR(DSTR_UNHANDLED_ARG_RPC, obj.GetType().Name));
         }
 
         public PointerEx Size()
@@ -171,6 +172,13 @@ namespace System
 
         public static bool IsByValue(Type t)
         {
+            if(!Environment.Is64BitProcess)
+            {
+                if(t == typeof(ulong) || t == typeof(long))
+                {
+                    return false;
+                }
+            }
             return AllowedByValue.Contains(t);
         }
 

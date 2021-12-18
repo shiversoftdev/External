@@ -1,6 +1,6 @@
 ﻿using ExternalTestingUtility.Cheats;
-using Refract.UI.Core.Interfaces;
-using Refract.UI.Core.Singletons;
+using SMC.UI.Core.Interfaces;
+using SMC.UI.Core.Singletons;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;

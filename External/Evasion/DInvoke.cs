@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using static System.PEStructures.PE;
+using static System.EnvironmentEx;
 
 namespace System.Evasion
 {
@@ -86,7 +87,7 @@ namespace System.Evasion
             bool CallRes = fDllMain(ModuleMemoryBase, DLL_PROCESS_ATTACH, IntPtr.Zero);
             if (!CallRes)
             {
-                throw new InvalidOperationException("Failed to call DllMain -> DLL_PROCESS_ATTACH");
+                throw new Exception(DSTR(DSTR_DINVOKE_MAIN_FAILED));
             }
         }
 

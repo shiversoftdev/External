@@ -87,7 +87,12 @@ namespace System.ExThreads
 
         public ThreadContext32Ex(ThreadContextExFlags contextFlags)
         {
-            switch (contextFlags)
+            SetFlags(contextFlags);
+        }
+
+        public void SetFlags(ThreadContextExFlags contextExFlags)
+        {
+            switch (contextExFlags)
             {
                 case ThreadContextExFlags.All:
                     ctx.ContextFlags = CONTEXT_FLAGS.CONTEXT_ALL;
@@ -106,6 +111,33 @@ namespace System.ExThreads
         protected override bool GetContext(PointerEx thread, PointerEx context)
         {
             return NativeStealth.GetThreadContext(thread, context);
+        }
+
+        /// <summary>
+        /// Switch threadcontext flags to debug, and apply dr configurations
+        /// </summary>
+        /// <param name="dr0"></param>
+        /// <param name="dr1"></param>
+        /// <param name="dr2"></param>
+        public void SetDebug(PointerEx dr0, PointerEx dr1, PointerEx dr2)
+        {
+            ctx.ContextFlags = CONTEXT_FLAGS.CONTEXT_DEBUG_REGISTERS;
+            ctx.Dr7 = 0;
+            if (dr0)
+            {
+                ctx.Dr7 |= 1;
+            }
+            if (dr1)
+            {
+                ctx.Dr7 |= 2;
+            }
+            if (dr2)
+            {
+                ctx.Dr7 |= 4;
+            }
+            ctx.Dr0 = dr0;
+            ctx.Dr1 = dr1;
+            ctx.Dr2 = dr2;
         }
     }
 }

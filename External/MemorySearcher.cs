@@ -22,7 +22,7 @@ namespace System
 
     internal sealed class MemorySearcher
     {
-        private ProcessEx Proc;
+        private readonly ProcessEx Proc;
         public MemorySearcher(ProcessEx hostProcess)
         {
             Proc = hostProcess;

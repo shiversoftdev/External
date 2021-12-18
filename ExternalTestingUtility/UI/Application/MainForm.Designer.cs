@@ -29,7 +29,7 @@ namespace ExternalTestingUtility
         /// </summary>
         private void InitializeComponent()
         {
-            this.InnerForm = new Refract.UI.Core.Controls.CBorderedForm();
+            this.InnerForm = new SMC.UI.Core.Controls.CBorderedForm();
             this.ExampleRPC4 = new System.Windows.Forms.Button();
             this.RPCExample3 = new System.Windows.Forms.Button();
             this.RPCExample2 = new System.Windows.Forms.Button();
@@ -135,7 +135,7 @@ namespace ExternalTestingUtility
 
         #endregion
 
-        private Refract.UI.Core.Controls.CBorderedForm InnerForm;
+        private SMC.UI.Core.Controls.CBorderedForm InnerForm;
         private System.Windows.Forms.Button RPCTest1;
         private System.Windows.Forms.Button RPCExample2;
         private System.Windows.Forms.Button RPCExample3;

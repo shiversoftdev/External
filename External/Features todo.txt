@@ -3,20 +3,22 @@ Suspend/Resume Process
 Inject DLL via:
 	ThreadEx.Hijack
 	LoadLibraryA/CreateRemoteThread
-	Manual Map
+	Manual Map (Lunar method, or upgrade features to match that of lunar's)
 	Managed dll inject
-	SetWindowsHookEx (hijack native process)
+	SetWindowsHookEx
 Search memory via byte patterns
 Hijack processes for handles (rpc protocol)
 	Internal.dll?
 proc.MapFunction
 self doppelgang
+https://github.com/aaaddress1/PR0CESS/tree/main/miniGhosting
+Event dispatcher system:
+	- Emplace hooks such that an IPC event can fire and send info back to external
 
 Testing TODO:
 
 	float/double RPC
 	32 bit thread hijacking
-
 
 Bug Fixes TODO:
 	

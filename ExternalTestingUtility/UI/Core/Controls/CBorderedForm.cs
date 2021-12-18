@@ -1,4 +1,4 @@
-﻿using Refract.UI.Core.Interfaces;
+﻿using SMC.UI.Core.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -8,7 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using Refract.UI.Core.Singletons;
+using SMC.UI.Core.Singletons;
 using System.ComponentModel.Design;
 using System.Windows.Forms.Design;
 using System.Drawing.Design;
@@ -16,7 +16,7 @@ using System.Collections;
 
 //http://www.reza-aghaei.com/enable-designer-of-child-panel-in-a-usercontrol/
 //TODO: https://stackoverflow.com/questions/2575216/how-to-move-and-resize-a-form-without-a-border
-namespace Refract.UI.Core.Controls
+namespace SMC.UI.Core.Controls
 {
     [Designer(typeof(CBorderedFormDesigner))]
     public partial class CBorderedForm : UserControl, IThemeableControl
@@ -105,6 +105,16 @@ namespace Refract.UI.Core.Controls
             yield return TitleBar;
             yield return MainPanel;
             yield return DesignerContents;
+        }
+
+        public void SetExitHidden(bool hidden)
+        {
+            TitleBar.SetExitButtonVisible(!hidden);
+        }
+
+        public void SetDraggable(bool draggable)
+        {
+            TitleBar.DisableDrag = !draggable;
         }
     }
 

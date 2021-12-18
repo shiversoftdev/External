@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static System.EnvironmentEx;
 
 namespace System
 {
@@ -36,7 +37,7 @@ namespace System
         {
             if (IntPtr.Size < data.Length)
             {
-                throw new InvalidCastException("Cannot cast data of length " + data.Length + " to a pointer of size " + IntPtr.Size);
+                throw new InvalidCastException(DSTR(DSTR_PTR_CAST_FAIL, data.Length, IntPtr.Size));
             }
 
             if(data.Length < IntPtr.Size)

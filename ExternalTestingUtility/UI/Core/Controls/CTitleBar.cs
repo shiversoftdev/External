@@ -1,5 +1,5 @@
-﻿using Refract.UI.Core.Interfaces;
-using Refract.UI.Core.Singletons;
+﻿using SMC.UI.Core.Interfaces;
+using SMC.UI.Core.Singletons;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -10,15 +10,18 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace Refract.UI.Core.Controls
+namespace SMC.UI.Core.Controls
 {
     public partial class CTitleBar : UserControl, IThemeableControl
     {
+        public bool DisableDrag;
         public CTitleBar()
         {
             InitializeComponent();
             MouseDown += MouseDown_Drag;
-            UIThemeManager.RegisterCustomThemeHandler(typeof(CTitleBar), ApplyThemeCustom_Implementation);
+            UIThemeManager.RegisterCustomThemeHandler(typeof(CTitleBar), ApplyThemeCustomType_Implementation);
+            UIThemeManager.OnThemeChanged(this, ApplyThemeCustom_Implementation);
+            TitleLabel.MouseDown += MouseDown_Drag;
         }
 
         private void ExitButton_Click(object sender, EventArgs e)
@@ -37,6 +40,7 @@ namespace Refract.UI.Core.Controls
         private void MouseDown_Drag(object sender, System.Windows.Forms.MouseEventArgs e)
         {
             if (ParentForm == null) return;
+            if (DisableDrag) return;
             if (e.Button == MouseButtons.Left)
             {
                 ReleaseCapture();
@@ -44,9 +48,18 @@ namespace Refract.UI.Core.Controls
             }
         }
 
+        public void SetExitButtonVisible(bool isVisible)
+        {
+            ExitButton.Visible = isVisible;
+        }
+
+        private void ApplyThemeCustomType_Implementation(UIThemeInfo themeData)
+        {
+
+        }
+
         private void ApplyThemeCustom_Implementation(UIThemeInfo themeData)
         {
-            //TitleLabel.ForeColor = themeData.AccentColor;
             ExitButton.BackColor = themeData.LightBackColor;
         }
 

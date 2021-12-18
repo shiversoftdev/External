@@ -1,5 +1,5 @@
 ﻿
-namespace Refract.UI.Core.Controls
+namespace SMC.UI.Core.Controls
 {
     partial class CTitleBar
     {

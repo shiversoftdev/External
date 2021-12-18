@@ -1,5 +1,5 @@
 ﻿
-namespace Refract.UI.Core.Controls
+namespace SMC.UI.Core.Controls
 {
     partial class CBorderedForm
     {
@@ -30,7 +30,7 @@ namespace Refract.UI.Core.Controls
         private void InitializeComponent()
         {
             this.MainPanel = new System.Windows.Forms.Panel();
-            this.TitleBar = new Refract.UI.Core.Controls.CTitleBar();
+            this.TitleBar = new SMC.UI.Core.Controls.CTitleBar();
             this.DesignerContents = new System.Windows.Forms.Panel();
             this.MainPanel.SuspendLayout();
             this.SuspendLayout();
