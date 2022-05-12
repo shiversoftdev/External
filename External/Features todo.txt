@@ -14,11 +14,12 @@ self doppelgang
 https://github.com/aaaddress1/PR0CESS/tree/main/miniGhosting
 Event dispatcher system:
 	- Emplace hooks such that an IPC event can fire and send info back to external
+Inject LUAu remote environment to any process with default libraries for processex like functionality
+	- read/write/rpc memory
 
 Testing TODO:
 
 	float/double RPC
-	32 bit thread hijacking
 
 Bug Fixes TODO:
 	

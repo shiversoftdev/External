@@ -17,6 +17,7 @@ namespace System.Evasion
         internal static class ModuleConst
         {
             public static string CONST_KERNEL32 => ToSysDLL("kernel32.dll");
+            public static string CONST_NTDLL => ToSysDLL("ntdll.dll");
 
             private static string ToSysDLL(string relPath)
             {

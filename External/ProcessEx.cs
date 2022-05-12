@@ -281,8 +281,12 @@ namespace System
             SetBytes(absoluteAddress, writeData);
         }
 
-        public string GetString(PointerEx absoluteAddress, int MaxLength = 1023, int buffSize = 256) 
+        public string GetString(PointerEx absoluteAddress, int MaxLength = -1, int buffSize = 256) 
         {
+            if(MaxLength < 0)
+            {
+                MaxLength = MaxStringReadLength;
+            }
             byte[] buffer;
             byte[] rawString = new byte[MaxLength + 1];
             int bytesRead = 0;
@@ -317,6 +321,7 @@ namespace System
         /// <returns></returns>
         public PointerEx MapModule(Memory<byte> moduleData, ModuleLoadOptions loadOptions = null)
         {
+            
             if (!Refresh())
             {
                 throw new InvalidOperationException(DSTR(DSTR_INJECT_DEAD_PROC));
@@ -700,6 +705,11 @@ namespace System
                                 CallRipHijack(hShellcode, threadStateAddress);
                             }
                             break;
+                        case ExCallThreadType.XCTT_QUAPC:
+                            {
+                                QueueUserAPC2Call(hShellcode, threadStateAddress);
+                            }
+                            break;
                     }
 
                     if (!Handle)
@@ -894,6 +904,54 @@ namespace System
             threadContext.InstructionPointer = hIntercept;
         }
 
+
+        // https://repnz.github.io/posts/apc/user-apc/
+        // oh how I love random blog posts like this
+        private void QueueUserAPC2Call(PointerEx hShellcode, PointerEx threadStateAddress)
+        {
+            var targetThread = GetEarliestActiveThread();
+            if (targetThread == null)
+            {
+                throw new Exception(DSTR(DSTR_FIND_THREAD_HIJACK));
+            }
+
+            if (BaseProcess is null) throw new InvalidOperationException();
+
+            PointerEx hThread = NativeStealth.OpenThread((int)ThreadAccess.THREAD_HIJACK, false, targetThread.Id);
+
+            if (!hThread)
+            {
+                throw new Exception(DSTR(DSTR_OPEN_THREAD_FAILED));
+            }
+
+            NativeStealth.QueueUserAPC2(hShellcode, hThread, 1);
+
+            CloseHandle(hThread);
+
+            // necessary wait, buffer time for something, without it, rpc hangs...
+            Thread.Sleep(1);
+
+            // await thread exit status
+            int timeWaitMS = 0;
+            while (Handle)
+            {
+                if (timeWaitMS >= RPCThreadTimeoutMS || GetValue<int>(threadStateAddress) != 0)
+                {
+                    break;
+                }
+                Thread.Sleep(RPCPollIntervalMS);
+                timeWaitMS += RPCPollIntervalMS;
+            }
+
+            if (timeWaitMS >= RPCThreadTimeoutMS)
+            {
+                throw new Exception(DSTR(DSTR_RPC_TIMEOUT));
+            }
+#if DEV
+            System.IO.File.AppendAllText("log.txt", $"good to go!\n");
+#endif
+        }
+
         /// <summary>
         /// Allocate readable and writable memory in the target process. If executable is true, it will also be executable. Is not managed and can be leaked, so remember to free the memory when it is no longer needed.
         /// </summary>
@@ -968,6 +1026,7 @@ namespace System
             {
                 case ExCallThreadType.XCTT_RIPHijack:
                 case ExCallThreadType.XCTT_NtCreateThreadEx:
+                case ExCallThreadType.XCTT_QUAPC:
                     return true;
 
                 case ExCallThreadType.XCTT_DebugBreakpoint_Direct:
@@ -1113,10 +1172,16 @@ namespace System
         /// Maximum time to wait for an RPC call to return before aborting it
         /// </summary>
         public int RPCThreadTimeoutMS = 1000;
+
         /// <summary>
         /// Time in MS to wait between thread state polling cycles awaiting exit for RPC calls.
         /// </summary>
         public int RPCPollIntervalMS = 10;
+
+        /// <summary>
+        /// Maximum number of characters to read from a string
+        /// </summary>
+        public int MaxStringReadLength = 1023;
         #endregion
 
         #region static members
@@ -1148,7 +1213,7 @@ namespace System
         XCTT_NtCreateThreadEx,
 
         /// <summary>
-        /// Start a call via a thread hijacking procedure involving an RIP detour via the thread id specified (not thread safe)
+        /// Start a call via a thread hijacking procedure involving an RIP detour via the thread id specified (not thread safe, can crash if the victim thread is within exception handler code)
         /// </summary>
         XCTT_RIPHijack,
 
@@ -1168,9 +1233,14 @@ namespace System
         XCTT_Custom_DS_Detour,
 
         /// <summary>
-        /// Start a call via a debug breakpoint in DR3, handled by a custom exception handler detour. Return address for call will be the resume position, which could be detected by some games.
+        /// [UNIMPLEMENTED] Start a call via a debug breakpoint in DR3, handled by a custom exception handler detour. Return address for call will be the resume position, which could be detected by some games.
         /// </summary>
-        XCTT_DebugBreakpoint_Direct
+        XCTT_DebugBreakpoint_Direct,
+
+        /// <summary>
+        /// Queue a user APC to execute the RPC on the main thread (preferred RPC method).
+        /// </summary>
+        XCTT_QUAPC
     }
 
     #endregion
