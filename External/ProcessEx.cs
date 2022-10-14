@@ -3,21 +3,21 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.ExThreads;
-using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.PEStructures;
-using System.Reflection.PortableExecutable;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using static System.EnvironmentEx;
-using static System.ExXMMReturnType;
 using static System.ModuleLoadOptions;
 using static System.ModuleLoadType;
+using static System.ExXMMReturnType;
+using System.Threading;
+using System.Runtime.CompilerServices;
+using System.ExThreads;
+using System.Reflection.PortableExecutable;
+using System.IO;
 
 namespace System
 {
@@ -82,7 +82,7 @@ namespace System
 
         [DllImport("kernel32.dll")]
         public static extern void GetSystemInfo(out SYSTEM_INFO lpSystemInfo);
-
+        
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern PointerEx VirtualQueryEx(PointerEx hProcess, PointerEx lpAddress, out MEMORY_BASIC_INFORMATION lpBuffer, uint dwLength);
 
@@ -99,7 +99,7 @@ namespace System
         #region methods
         private Timer ProcInfoTimer;
         private EventHandler ProcInfoUpdate;
-        public ProcessEx(Process p, bool openHandle = false)
+        public ProcessEx(Process p, bool openHandle = false) 
         {
             if (p is null)
             {
@@ -109,7 +109,7 @@ namespace System
             BaseProcess = p;
             p.EnableRaisingEvents = true;
             p.Exited += P_Exited;
-            if (openHandle) OpenHandle();
+            if(openHandle) OpenHandle();
             ProcInfoTimer = new Timer(PInfoTick, null, 0, 1000);
             ProcInfoUpdate += PInfoUpdate;
         }
@@ -141,12 +141,12 @@ namespace System
             return true;
         }
 
-        private void P_Exited(object sender, EventArgs e)
+        private void P_Exited(object sender, EventArgs e) 
         {
             Handle = IntPtr.Zero;
         }
 
-        public PointerEx OpenHandle(int dwDesiredAccess = PROCESS_ACCESS, bool newOnly = false)
+        public PointerEx OpenHandle(int dwDesiredAccess = PROCESS_ACCESS, bool newOnly = false) 
         {
             if (!Refresh()) return IntPtr.Zero;
             if (Handle.IntPtr == IntPtr.Zero || newOnly) Handle = OpenProcess(dwDesiredAccess, false, BaseProcess.Id);
@@ -215,7 +215,7 @@ namespace System
             SetBytes(absoluteAddress, data);
         }
 
-        public byte[] GetBytes(PointerEx absoluteAddress, PointerEx NumBytes)
+        public byte[] GetBytes(PointerEx absoluteAddress, PointerEx NumBytes) 
         {
             if (!Handle)
             {
@@ -231,7 +231,7 @@ namespace System
             return data;
         }
 
-        public void SetBytes(PointerEx absoluteAddress, byte[] data)
+        public void SetBytes(PointerEx absoluteAddress, byte[] data) 
         {
             if (!Handle)
             {
@@ -281,19 +281,19 @@ namespace System
             SetBytes(absoluteAddress, writeData);
         }
 
-        public string GetString(PointerEx absoluteAddress, int MaxLength = -1, int buffSize = 256)
+        public string GetString(PointerEx absoluteAddress, int MaxLength = -1, int buffSize = 256) 
         {
-            if (MaxLength < 0)
+            if(MaxLength < 0)
             {
                 MaxLength = MaxStringReadLength;
             }
             byte[] buffer;
             byte[] rawString = new byte[MaxLength + 1];
             int bytesRead = 0;
-            while (bytesRead < MaxLength)
+            while(bytesRead < MaxLength)
             {
                 buffer = GetBytes(absoluteAddress + bytesRead, buffSize);
-                for (int i = 0; i < buffer.Length && i + bytesRead < MaxLength; i++)
+                for(int i = 0; i < buffer.Length && i + bytesRead < MaxLength; i++)
                 {
                     if (buffer[i] == 0) return rawString.String();
                     rawString[bytesRead + i] = buffer[i];
@@ -303,12 +303,12 @@ namespace System
             return rawString.String();
         }
 
-        public void SetString(PointerEx absoluteAddress, string Value)
+        public void SetString(PointerEx absoluteAddress, string Value) 
         {
             SetArray(absoluteAddress, Value.Bytes());
         }
 
-        public PointerEx OffsetCalculator(string moduleName, int baseOffset, int[] offsets)
+		public PointerEx OffsetCalculator(string moduleName, int baseOffset, int[] offsets)
         {
             PointerEx moduleAddr = GetLoadedModuleAddress(moduleName);
             PointerEx result = moduleAddr + baseOffset;
@@ -357,7 +357,7 @@ namespace System
         /// <returns></returns>
         public PointerEx MapModule(Memory<byte> moduleData, ModuleLoadOptions loadOptions = null)
         {
-
+            
             if (!Refresh())
             {
                 throw new InvalidOperationException(DSTR(DSTR_INJECT_DEAD_PROC));
@@ -379,20 +379,20 @@ namespace System
             var data = moduleData.ToArray();
             var module = MapModuleToMemory(data.Unmanaged(), data);
             PointerEx hModule = module.ModuleBase;
-            if (loadOptions != null)
+            if(loadOptions != null)
             {
-                if (loadOptions.ExecMain)
+                if(loadOptions.ExecMain)
                 {
                     PEImage img = new PEImage(data);
 #if DEBUG
                     DLog($"Invoking module entrypoint {hModule + img.Headers.PEHeader.AddressOfEntryPoint}");
 #endif
-                    if (!CallByMethod<bool>(hModule + img.Headers.PEHeader.AddressOfEntryPoint, loadOptions.MainThreadType, hModule, 1, 0))
+                    if(!CallByMethod<bool>(hModule + img.Headers.PEHeader.AddressOfEntryPoint, loadOptions.MainThreadType, hModule, 1, 0))
                     {
                         throw new Exception(DSTR(DSTR_DINVOKE_MAIN_FAILED));
                     }
                 }
-                if (loadOptions.ClearHeader)
+                if(loadOptions.ClearHeader)
                 {
                     var SizeOfHeaders = module.PEINFO.Is32Bit ? module.PEINFO.OptHeader32.SizeOfHeaders : module.PEINFO.OptHeader64.SizeOfHeaders;
                     SetBytes(hModule, new byte[(int)SizeOfHeaders]);
@@ -411,7 +411,7 @@ namespace System
         public PointerEx GetProcAddress(string moduleName, string functionName)
         {
             ProcessModuleExportEx moduleExport = this[moduleName].GetExportedFunction(functionName);
-            while (moduleExport.Forwarder != null)
+            while(moduleExport.Forwarder != null)
             {
                 var forwardedData = moduleExport.Forwarder.Split('.');
                 var targetModule = this[$"{forwardedData[0]}.dll"];
@@ -481,16 +481,16 @@ namespace System
         public ProcessModuleEx LoadAndRegisterDllRemote(string dllPath)
         {
             // check for an existing module
-            foreach (var dll in Modules)
+            foreach(var dll in Modules)
             {
-                if (dll.ModulePath == dllPath)
+                if(dll.ModulePath == dllPath)
                 {
                     return dll;
                 }
             }
 
             var baseAddress = LdrLoadDllRemote(dllPath);
-            if (!baseAddress)
+            if(!baseAddress)
             {
                 throw new Exception(DSTR(DSTR_FAILED_LOAD_MODULE, dllPath));
             }
@@ -518,7 +518,7 @@ namespace System
 
         internal bool IsWow64Process()
         {
-            if (BaseProcess is null || !IsWow64Process(BaseProcess.Handle, out bool result)) throw new ComponentModel.Win32Exception();
+            if(BaseProcess is null || !IsWow64Process(BaseProcess.Handle, out bool result)) throw new ComponentModel.Win32Exception();
             return result;
         }
 
@@ -604,13 +604,13 @@ namespace System
         /// <returns></returns>
         public T CallRefByMethod<T>(PointerEx absoluteAddress, ExCallThreadType callType, ref object[] args)
         {
-            if (args == null)
+            if(args == null)
             {
                 args = new object[0];
             }
             RPCParams rpcData = new RPCParams();
             rpcData.ParamData = new object[args.Length];
-            if (args.Length > 0)
+            if(args.Length > 0)
             {
                 args.CopyTo(rpcData.ParamData, 0);
             }
@@ -661,7 +661,7 @@ namespace System
                 throw new InvalidCastException(DSTR(DSTR_CAST_SERIALIZE_FAILED, typeof(T).GetType().Name));
             }
 
-            if (!IsRPCTypeInitialized(callType))
+            if(!IsRPCTypeInitialized(callType))
             {
                 throw new InvalidOperationException(DSTR(DSTR_RPC_INITIALIZED, callType));
             }
@@ -670,11 +670,11 @@ namespace System
             var is64Call = pointerSize == 8;
 
             var xmmRetType = XMMR_NONE;
-            if (typeof(T) == typeof(double))
+            if(typeof(T) == typeof(double))
             {
                 xmmRetType = XMMR_DOUBLE;
             }
-            if (typeof(T) == typeof(float))
+            if(typeof(T) == typeof(float))
             {
                 xmmRetType = XMMR_SINGLE;
             }
@@ -701,10 +701,10 @@ namespace System
                 for (int i = 0; i < args.Length; i++)
                 {
                     ArgumentList[i] = stackFrame.GetArg(i);
-                    if (is64Call && i < 4 && stackFrame.IsArgXMM(i))
+                    if(is64Call && i < 4 && stackFrame.IsArgXMM(i))
                     {
                         xmmArgMask |= (byte)(1 << i);
-                        if (stackFrame.IsArgXMM64(i))
+                        if(stackFrame.IsArgXMM64(i))
                         {
                             xmmArgMask |= (byte)(1 << (i + 4));
                         }
@@ -727,7 +727,7 @@ namespace System
                     //Environment.Exit(0);
 #endif
 
-                    switch (callType)
+                    switch(callType)
                     {
                         case ExCallThreadType.XCTT_NtCreateThreadEx:
                             {
@@ -754,9 +754,9 @@ namespace System
                     }
 
                     // deserialize args for ref calls
-                    if (outParams != null && outParams.ParamData.Length > 0)
+                    if(outParams != null && outParams.ParamData.Length > 0)
                     {
-                        for (int i = 0; i < outParams.ParamData.Length; i++)
+                        for(int i = 0; i < outParams.ParamData.Length; i++)
                         {
                             // only deserialize ref types
                             if (!stackFrame.IsArgByRef(i)) continue;
@@ -764,12 +764,12 @@ namespace System
                             var __type = outParams.ParamData[i].GetType();
                             var __handle = stackFrame.GetArg(i);
 
-                            if (__type == typeof(string))
+                            if(__type == typeof(string))
                             {
                                 outParams.ParamData[i] = GetString(__handle);
                                 continue;
                             }
-                            if (__type == typeof(byte[]))
+                            if(__type == typeof(byte[]))
                             {
                                 outParams.ParamData[i] = GetBytes(__handle, ((byte[])outParams.ParamData[i]).Length);
                                 continue;
@@ -792,7 +792,7 @@ namespace System
                     }
 
                     // if its a value type that fits in a pointerex...
-                    if (Marshal.SizeOf(default(T)) <= Marshal.SizeOf(default(PointerEx)))
+                    if(Marshal.SizeOf(default(T)) <= Marshal.SizeOf(default(PointerEx)))
                     {
                         try
                         {
@@ -801,7 +801,7 @@ namespace System
                         catch { }
                     }
 
-                    if (r_val)
+                    if(r_val)
                     {
                         byte[] data = GetBytes(r_val, Marshal.SizeOf(default(T)));
                         return data.ToStructUnsafe<T>();
@@ -817,7 +817,7 @@ namespace System
             }
             finally
             {
-                if (Handle)
+                if(Handle)
                 {
                     VirtualFreeEx(Handle, hStack, stackSize, (int)FreeType.Release);
                 }
@@ -828,7 +828,7 @@ namespace System
         private void CallRipHijack(PointerEx hShellcode, PointerEx threadStateAddress)
         {
             var targetThread = GetEarliestActiveThread();
-            if (targetThread == null)
+            if(targetThread == null)
             {
                 throw new Exception(DSTR(DSTR_FIND_THREAD_HIJACK));
             }
@@ -855,11 +855,11 @@ namespace System
 
                     NativeStealth.SuspendThread(hThread);
 
-                    if (GetArchitecture() == Architecture.X86)
+                    if(GetArchitecture() == Architecture.X86)
                     {
 
                         ThreadContext32Ex ctx32 = new ThreadContext32Ex(ThreadContextExFlags.All);
-                        if (!ctx32.GetContext(hThread))
+                        if(!ctx32.GetContext(hThread))
                         {
                             throw new Exception(DSTR(DSTR_THREAD_CTX_FAILED));
                         }
@@ -901,7 +901,7 @@ namespace System
                         timeWaitMS += RPCPollIntervalMS;
                     }
 
-                    if (timeWaitMS >= RPCThreadTimeoutMS)
+                    if(timeWaitMS >= RPCThreadTimeoutMS)
                     {
                         throw new Exception(DSTR(DSTR_RPC_TIMEOUT));
                     }
@@ -912,13 +912,13 @@ namespace System
             }
             finally
             {
-                if (Handle)
+                if(Handle)
                 {
                     VirtualFreeEx(Handle, hThreadResume, 4096, (int)FreeType.Release);
                     VirtualFreeEx(Handle, hXmmSpace, 256 * 2, (int)FreeType.Release);
                 }
             }
-
+            
         }
 
         private void HijackRipInternal64(PointerEx hThread, PointerEx hShellcode, PointerEx hIntercept, PointerEx hXmmSpace, ThreadContext64Ex threadContext)
@@ -1058,7 +1058,7 @@ namespace System
         /// <returns></returns>
         public bool IsRPCTypeInitialized(ExCallThreadType type)
         {
-            switch (type)
+            switch(type)
             {
                 case ExCallThreadType.XCTT_RIPHijack:
                 case ExCallThreadType.XCTT_NtCreateThreadEx:
@@ -1066,7 +1066,7 @@ namespace System
                     return true;
 
                 case ExCallThreadType.XCTT_DebugBreakpoint_Direct:
-                // TODO
+                    // TODO
                 default:
                     throw new NotImplementedException(DSTR(DSTR_CALLTYPE_NOT_IMPLEMENTED, type));
             }
@@ -1080,7 +1080,7 @@ namespace System
         {
             if (BaseProcess is null) return null;
             ProcessThread earliest = null;
-            foreach (ProcessThread thread in BaseProcess.Threads)
+            foreach(ProcessThread thread in BaseProcess.Threads)
             {
                 if (thread.ThreadState == Diagnostics.ThreadState.Terminated) continue;
                 if (earliest == null)
@@ -1103,9 +1103,9 @@ namespace System
         /// <returns></returns>
         public ProcessModuleEx FindModuleByAddress(PointerEx baseAddress)
         {
-            foreach (var module in Modules)
+            foreach(var module in Modules)
             {
-                if (module.BaseAddress == baseAddress)
+                if(module.BaseAddress == baseAddress)
                 {
                     return module;
                 }
@@ -1152,7 +1152,7 @@ namespace System
         {
             get
             {
-                foreach (var m in Modules)
+                foreach(var m in Modules)
                 {
                     if (m.ModuleName.Equals(name, StringComparison.InvariantCultureIgnoreCase)) return m;
                     if (m.ModulePath.ToLowerInvariant().EndsWith(name.ToLowerInvariant())) return m;
@@ -1171,7 +1171,7 @@ namespace System
         public ExCallThreadType DefaultRPCType { get; private set; }
 
         public PointerEx BaseAddress
-        {
+        { 
             get
             {
                 return BaseProcess?.MainModule.BaseAddress ?? IntPtr.Zero;
@@ -1228,7 +1228,7 @@ namespace System
     #region public Typedef
     #region enum
     public enum ModuleLoadType
-    {
+    { 
         MLT_ManualMapped
     }
 
