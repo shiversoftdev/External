@@ -20,7 +20,7 @@ namespace System
         RWX = 2 | 4 | 8
     }
 
-    internal sealed class MemorySearcher
+    public sealed class MemorySearcher
     {
         private readonly ProcessEx Proc;
         public MemorySearcher(ProcessEx hostProcess)
@@ -44,7 +44,7 @@ namespace System
                 string[] patterns = query.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
                 byte[] finalPattern = new byte[patterns.Length];
                 byte[] mask = new byte[patterns.Length];
-                for(int i = 0; i < patterns.Length; i++)
+                for (int i = 0; i < patterns.Length; i++)
                 {
                     string s = patterns[i];
                     if (s == "?") mask[i] = 0;
@@ -68,7 +68,7 @@ namespace System
                 if (end > proc_max_address) end = proc_max_address;
                 PointerEx cBase = start.Clone();
                 var memInfo = new ProcessEx.MEMORY_BASIC_INFORMATION();
-                while(ProcessEx.VirtualQueryEx(Proc.Handle, cBase, out memInfo, (uint)Marshal.SizeOf(memInfo)) &&
+                while (ProcessEx.VirtualQueryEx(Proc.Handle, cBase, out memInfo, (uint)Marshal.SizeOf(memInfo)) &&
                 cBase < end && cBase + memInfo.RegionSize > cBase)
                 {
                     bool isValid = memInfo.State == ProcessEx.MEM_COMMIT;
@@ -150,7 +150,7 @@ namespace System
         private int FindPattern(byte[] body, byte[] pattern, byte[] masks, int start = 0)
         {
             int foundIndex = -1;
-            if (body.Length <= 0 || pattern.Length <= 0 ) return -1;
+            if (body.Length <= 0 || pattern.Length <= 0) return -1;
             if (start > body.Length - pattern.Length || pattern.Length > body.Length) return -1;
             for (int index = start; index <= body.Length - pattern.Length; index++)
             {
