@@ -308,7 +308,7 @@ namespace System
             SetArray(absoluteAddress, Value.Bytes());
         }
 
-		public PointerEx OffsetCalculator(string moduleName, int baseOffset, int[] offsets)
+        public PointerEx OffsetCalculator(string moduleName, int baseOffset, int[] offsets)
         {
             PointerEx moduleAddr = GetLoadedModuleAddress(moduleName);
             PointerEx result = moduleAddr + baseOffset;
