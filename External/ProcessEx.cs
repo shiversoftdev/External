@@ -25,7 +25,7 @@ namespace System
     {
         #region const
         public const int PROCESS_CREATE_THREAD = 0x02;
-        public const int PROCESS_ACCESS = PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_VM_OPERATION | PROCESS_CREATE_THREAD;
+        public const int PROCESS_ACCESS = PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_VM_OPERATION | PROCESS_CREATE_THREAD | 0x0040;
         public const int PROCESS_QUERY_INFORMATION = 0x0400;
         public const int PAGE_READWRITE = 0x04;
         public const int PROCESS_VM_READ = 0x0010;
@@ -37,6 +37,11 @@ namespace System
         public const int MEM_RESERVE = 0x00002000;
         public const int MEM_PRIVATE = 0x20000;
         public const int MEM_IMAGE = 0x1000000;
+        private static Guid CLSID_CLRMetaHost =    new Guid("{9280188d-0e8e-4867-b30c-7fa83884e8de}");
+        private static Guid RIDGuid =              new Guid("{d332db9e-b9b3-4125-8207-a14884f53216}");
+        private static Guid RIDGuid2 =             new Guid("{bd39d1d2-ba2f-486a-89b0-b4b0cb466891}");
+        private static Guid RIDGuid3 =             new Guid("{90f1a06c-7712-4762-86b5-7a5eba6bdb02}");
+        private static Guid CLSID_CLRRuntimeHost = new Guid("{90f1a06e-7712-4762-86b5-7a5eba6bdb02}");
         #endregion
 
         #region typedef
@@ -97,7 +102,7 @@ namespace System
         #endregion
 
         #region methods
-        private Timer ProcInfoTimer;
+        private System.Timers.Timer ProcInfoTimer;
         private EventHandler ProcInfoUpdate;
         public ProcessEx(Process p, bool openHandle = false) 
         {
@@ -110,20 +115,22 @@ namespace System
             p.EnableRaisingEvents = true;
             p.Exited += P_Exited;
             if(openHandle) OpenHandle();
-            ProcInfoTimer = new Timer(PInfoTick, null, 0, 1000);
-            ProcInfoUpdate += PInfoUpdate;
+            ProcInfoTimer = new System.Timers.Timer(1000);
+            ProcInfoTimer.Elapsed += ProcInfoTimer_Elapsed;
+            ProcInfoTimer.Start();
         }
 
-        private void PInfoTick(object state)
+        private void ProcInfoTimer_Elapsed(object sender, Timers.ElapsedEventArgs e)
         {
-            ProcInfoUpdate?.Invoke(null, null);
+            PInfoUpdate(null, null);
         }
 
         private void PInfoUpdate(object sender, EventArgs e)
         {
             if (!Refresh())
             {
-                ProcInfoTimer.Change(Timeout.Infinite, Timeout.Infinite);
+                ProcInfoTimer.Stop();
+                P_Exited(null, null);
             }
         }
 
@@ -143,7 +150,8 @@ namespace System
 
         private void P_Exited(object sender, EventArgs e) 
         {
-            Handle = IntPtr.Zero;
+            ProcInfoTimer.Stop();
+            CloseHandle();
         }
 
         public PointerEx OpenHandle(int dwDesiredAccess = PROCESS_ACCESS, bool newOnly = false) 
@@ -1077,13 +1085,86 @@ namespace System
             return null;
         }
 
-        public override string ToString()
+        // NOT WORKING, STILL TODO need to finish the TLB parser
+        private PointerEx LoadManagedLibraryRemote(string modulePath)
         {
-            return $"{BaseProcess?.Id ?? -1}:{BaseProcess?.ProcessName ?? "???"}";
+            var mscoree = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "mscoree.dll");
+            if (!File.Exists(mscoree))
+            {
+                throw new Exception(DSTR(DSTR_DOTNET_MISSING));
+            }
+
+            // setup some prerequisites
+            var mscoreeHdnl = LoadAndRegisterDllRemote(mscoree);
+            var hCLRCreateInstance = GetProcAddress("mscoree.dll", "CLRCreateInstance");
+            PointerEx pMetaHost = 0;
+            PointerEx pRuntimeInfo = 0;
+            PointerEx pClrRuntimeHost = 0;
+
+            // perform a callref to get the metahost object
+            // we pass pMetaHost by ref because it is technically an out param (passed as &pMetaHost)
+            var args = new object[] { CLSID_CLRMetaHost.ToByteArray(), RIDGuid.ToByteArray(), pMetaHost.ToByteArray() };
+            var hResult = CallRef<int>(hCLRCreateInstance, ref args);
+            pMetaHost = ((byte[])args[2]).ToStruct<PointerEx>();
+
+            // follow the metahost pointer and grab its vtable pointer
+            PointerEx pMetaHost_vtable = GetValue<long>(pMetaHost + 0); // the plus zero is for me so my brain starts working
+            PointerEx pMetaHost_vfn_GetRuntime = GetValue<long>(pMetaHost_vtable + (0x18 * 1)); // grab the vfn for GetRuntime
+
+            // get the runtime info for this
+            args = new object[] { pMetaHost, (long)0, RIDGuid2.ToByteArray(), pRuntimeInfo.ToByteArray() };
+            hResult = CallRef<int>(pMetaHost_vfn_GetRuntime, ref args);
+            pRuntimeInfo = ((byte[])args[3]).ToStruct<PointerEx>();
+
+            // follow the runtime pointer and grab its vtable pointer
+            PointerEx pRuntimeInfo_vtable = GetValue<long>(pRuntimeInfo + 0); // the plus zero is for me so my brain starts working
+            PointerEx pRuntimeInfo_vfn_GetInterface = GetValue<long>(pRuntimeInfo_vtable + (0x18 * 3)); // grab the vfn for GetInterface
+
+            // grab the runtime host for CLR
+            args = new object[] { pRuntimeInfo, CLSID_CLRRuntimeHost.ToByteArray(), RIDGuid3.ToByteArray(), pClrRuntimeHost.ToByteArray() };
+            hResult = CallRef<int>(pRuntimeInfo_vfn_GetInterface, ref args);
+            pClrRuntimeHost = ((byte[])args[3]).ToStruct<PointerEx>();
+
+            // follow the runtime host pointer and grab its vtable pointer
+            PointerEx pClrRuntimeHost_vtable = GetValue<long>(pClrRuntimeHost + 0); // the plus zero is for me so my brain starts working
+            PointerEx pClrRuntimeHost_vfn_Start = GetValue<long>(pClrRuntimeHost_vtable + (0x18 * 1)); // grab the vfn for Start
+
+            // start the runtime
+            hResult = Call<int>(pClrRuntimeHost_vfn_Start, pClrRuntimeHost);
+
+            return 0;
+        }
+
+        public PointerEx AddOffsetArray(PointerEx absoluteAddress, PointerEx[] offsets)
+        {
+            PointerEx result = absoluteAddress;
+            foreach (PointerEx offset in offsets)
+            {
+                if(PointerSize() == sizeof(int))
+                {
+                    result = offset + GetValue<int>(result);
+                }
+                else
+                {
+                    result = offset + GetValue<long>(result);
+                }
+            }
+            return result;
+        }
+
+        public void NOP(PointerEx absoluteAddress, int numberOfBytes)
+        {
+            byte[] data = Enumerable.Repeat((byte)0x90, numberOfBytes).ToArray();
+            SetBytes(absoluteAddress, data);
         }
         #endregion
 
         #region overrides
+        public override string ToString()
+        {
+            return $"{BaseProcess?.Id ?? -1}:{BaseProcess?.ProcessName ?? "???"}";
+        }
+
         public static implicit operator ProcessEx(Process p)
         {
             return new ProcessEx(p);

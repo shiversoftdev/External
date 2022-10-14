@@ -145,7 +145,7 @@ namespace System
         {
             get
             {
-                return GetExportedFunction(FunctionName).AbsoluteAddress;
+                return GetExportedFunction(FunctionName)?.AbsoluteAddress ?? 0;
             }
         }
         #endregion
