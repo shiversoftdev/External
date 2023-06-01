@@ -213,6 +213,15 @@ namespace System
         /// Dotnet runtime missing
         /// </summary>
         internal static readonly long DSTR_DOTNET_MISSING = 49;
+
+        /// <summary>
+        /// Suspension of thread failed.
+        /// </summary>
+        internal static readonly long DSTR_SUSPEND_TIMEOUT = 50;
+        /// <summary>
+        /// Resume thread failed
+        /// </summary>
+        internal static readonly long DSTR_RESUME_TIMEOUT = 51;
         #endregion
         private static readonly PointerEx APISetMapAddress;
         static EnvironmentEx()
@@ -271,6 +280,8 @@ namespace System
             DSTR_SERIALIZE_TYPE_INVALID = CreateDebugString("Cannot cast type [{0}] to a serializable type for RPC. If this was an array, convert it to a byte array first.");
             DSTR_UNHANDLED_ARG_RPC = CreateDebugString("Unhandled argument type for serialization: {0}");
             DSTR_DOTNET_MISSING = CreateDebugString("Dotnet runtime missing");
+            DSTR_SUSPEND_TIMEOUT = CreateDebugString("Failed to suspend thread");
+            DSTR_RESUME_TIMEOUT = CreateDebugString("Resume thread failed");
             #endif
             #endregion
         }

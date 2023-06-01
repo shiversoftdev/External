@@ -873,7 +873,7 @@ namespace System
         #endregion
 
         #region VirtualAllocEx
-        #if USE_PINVOKE
+#if USE_PINVOKE
         [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
         private static extern PointerEx VirtualAllocEx(PointerEx hProcess, PointerEx lpAddress, uint dwSize, AllocationType flAllocationType, MemoryProtection flProtect);
 
@@ -881,7 +881,7 @@ namespace System
         {
             return VirtualAllocEx(hProcess, lpAddress, dwSize, flAllocationType, flProtect);
         }
-        #else
+#else
         public static PointerEx VirtualAllocExD(PointerEx hProcess, PointerEx lpAddress, uint dwSize, AllocationType flAllocationType, MemoryProtection flProtect)
         {
             object[] funcArgs =
@@ -890,7 +890,7 @@ namespace System
             };
             return (PointerEx)Evasion.DInvoke.DynamicAPIInvoke(CONST_KERNEL32, @"VirtualAllocEx", typeof(_VirtualAllocEx), ref funcArgs);
         }
-        #endif
+#endif
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         public delegate PointerEx _VirtualAllocEx(PointerEx hProcess, PointerEx lpAddress, uint dwSize, AllocationType flAllocationType, MemoryProtection flProtect);
         public static PointerEx VirtualAllocExM(PointerEx hProcess, PointerEx lpAddress, uint dwSize, AllocationType flAllocationType, MemoryProtection flProtect)
@@ -902,6 +902,44 @@ namespace System
             return (PointerEx)Evasion.DInvoke.ManualInvoke(CONST_KERNEL32, @"VirtualAllocEx", typeof(_VirtualAllocEx), ref funcArgs);
         }
         #endregion
+
+        #region NtAllocateVirtualMemory
+#if USE_PINVOKE
+        [DllImport("ntdll.dll", SetLastError = true, ExactSpelling = true)]
+        private static extern PointerEx NtAllocateVirtualMemory(PointerEx hProcess, ref PointerEx lpAddress, uint zeroBits, ref uint dwSize, AllocationType flAllocationType, MemoryProtection flProtect);
+
+        public static PointerEx NtAllocateVirtualMemoryP(PointerEx hProcess, ref PointerEx lpAddress, uint zeroBits, ref uint dwSize, AllocationType flAllocationType, MemoryProtection flProtect)
+        {
+            return NtAllocateVirtualMemory(hProcess, ref lpAddress, zeroBits, ref dwSize, flAllocationType, flProtect);
+        }
+#else
+        public static PointerEx NtAllocateVirtualMemoryD(PointerEx hProcess, ref PointerEx lpAddress, uint zeroBits, ref uint dwSize, AllocationType flAllocationType, MemoryProtection flProtect)
+        {
+            object[] funcArgs =
+            {
+                hProcess, lpAddress, zeroBits, dwSize, flAllocationType, flProtect
+            };
+            var result = (PointerEx)Evasion.DInvoke.DynamicAPIInvoke(CONST_NTDLL, @"NtAllocateVirtualMemory", typeof(_NtAllocateVirtualMemory), ref funcArgs);
+            lpAddress = (PointerEx)funcArgs[1];
+            dwSize = (uint)funcArgs[3];
+            return result;
+        }
+#endif
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate PointerEx _NtAllocateVirtualMemory(PointerEx hProcess, ref PointerEx lpAddress, uint zeroBits, ref uint dwSize, AllocationType flAllocationType, MemoryProtection flProtect);
+        public static PointerEx NtAllocateVirtualMemoryM(PointerEx hProcess, ref PointerEx lpAddress, uint zeroBits, ref uint dwSize, AllocationType flAllocationType, MemoryProtection flProtect)
+        {
+            object[] funcArgs =
+            {
+                hProcess, lpAddress, zeroBits, dwSize, flAllocationType, flProtect
+            };
+            var result = (PointerEx)Evasion.DInvoke.ManualInvoke(CONST_NTDLL, @"NtAllocateVirtualMemory", typeof(_NtAllocateVirtualMemory), ref funcArgs);
+            lpAddress = (PointerEx)funcArgs[1];
+            dwSize = (uint)funcArgs[3];
+            return result;
+        }
+        #endregion
+        
 
         #region VirtualProtectEx
 #if USE_PINVOKE
@@ -1100,50 +1138,50 @@ namespace System
 #region ResumeThread
 #if USE_PINVOKE
         [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern uint ResumeThread(PointerEx hThread);
-        public static uint ResumeThreadP(PointerEx hThread)
+        private static extern int ResumeThread(PointerEx hThread);
+        public static int ResumeThreadP(PointerEx hThread)
         {
             return ResumeThread(hThread);
         }
 #else
-        public static uint ResumeThreadD(PointerEx hThread)
+        public static int ResumeThreadD(PointerEx hThread)
         {
             object[] funcArgs = new object[] { hThread };
-            return (uint)Evasion.DInvoke.DynamicAPIInvoke(CONST_KERNEL32, "ResumeThread", typeof(_ResumeThread), ref funcArgs);
+            return (int)Evasion.DInvoke.DynamicAPIInvoke(CONST_KERNEL32, "ResumeThread", typeof(_ResumeThread), ref funcArgs);
         }
 #endif
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-        public delegate uint _ResumeThread(PointerEx hThread);
-        public static uint ResumeThreadM(PointerEx hThread)
+        public delegate int _ResumeThread(PointerEx hThread);
+        public static int ResumeThreadM(PointerEx hThread)
         {
             object[] funcArgs = new object[] { hThread };
-            return (uint)Evasion.DInvoke.ManualInvoke(CONST_KERNEL32, "ResumeThread", typeof(_ResumeThread), ref funcArgs);
+            return (int)Evasion.DInvoke.ManualInvoke(CONST_KERNEL32, "ResumeThread", typeof(_ResumeThread), ref funcArgs);
         }
         #endregion
 
-#region QueueUserAPC2
+        #region QueueUserAPC2
 #if USE_PINVOKE
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern uint QueueUserAPC2(PointerEx pfnAPC, PointerEx hThread, PointerEx dwData, int flags);
-        public static uint QueueUserAPC2P(PointerEx pfnAPC, PointerEx hThread, PointerEx dwData, int flags)
+        [DllImport("ntdll.dll", SetLastError = true)]
+        private static extern uint NtQueueApcThreadEx(PointerEx hThread, PointerEx flags, PointerEx pfnAPC, PointerEx a4, PointerEx a5, PointerEx a6s);
+        public static uint QueueUserAPC2P(PointerEx pfnAPC, PointerEx hThread, PointerEx flags)
         {
-            throw new NotImplementedException();
+            return NtQueueApcThreadEx((PointerEx)hThread, (PointerEx)flags, (PointerEx)pfnAPC, (PointerEx)0, (PointerEx)0, (PointerEx)0);
         }
 #else
-        public static uint QueueUserAPC2D(PointerEx pfnAPC, PointerEx hThread, int flags)
+        public static uint QueueUserAPC2D(PointerEx pfnAPC, PointerEx hThread, PointerEx flags)
         {
-            object[] funcArgs = new object[] { (ulong)hThread, (ulong)flags, (ulong)pfnAPC, (ulong)0, (ulong)0, (ulong)0 };
+            object[] funcArgs = new object[] { hThread, (PointerEx)flags, pfnAPC, (PointerEx)0, (PointerEx)0, (PointerEx)0 };
             return (uint)Evasion.DInvoke.DynamicAPIInvoke(CONST_NTDLL, "NtQueueApcThreadEx", typeof(_NtQueueApcThreadEx), ref funcArgs);
         }
 #endif
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-        public delegate uint _NtQueueApcThreadEx(ulong hThread, ulong flags, ulong pfnAPC, ulong a4, ulong a5, ulong a6);
+        public delegate uint _NtQueueApcThreadEx(PointerEx hThread, PointerEx flags, PointerEx pfnAPC, PointerEx a4, PointerEx a5, PointerEx a6);
 
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-        public delegate uint _QueueUserAPC2(PointerEx pfnAPC, PointerEx hThread, int flags);
-        public static uint QueueUserAPC2M(PointerEx pfnAPC, PointerEx hThread, int flags)
+        public delegate uint _QueueUserAPC2(PointerEx pfnAPC, PointerEx hThread, PointerEx flags);
+        public static uint QueueUserAPC2M(PointerEx pfnAPC, PointerEx hThread, PointerEx flags)
         {
-            object[] funcArgs = new object[] { (ulong)hThread, (ulong)flags, (ulong)pfnAPC, (ulong)0, (ulong)0, (ulong)0 };
+            object[] funcArgs = new object[] { (PointerEx)hThread, (PointerEx)flags, (PointerEx)pfnAPC, (PointerEx)0, (PointerEx)0, (PointerEx)0 };
             return (uint)Evasion.DInvoke.ManualInvoke(CONST_NTDLL, "NtQueueApcThreadEx", typeof(_NtQueueApcThreadEx), ref funcArgs);
         }
         #endregion
@@ -1234,6 +1272,7 @@ namespace System
         public static Native._ResumeThread ResumeThread { get; private set; }
         public static Native._LoadLibrary LoadLibrary { get; private set; }
         public static Native._QueueUserAPC2 QueueUserAPC2 { get; private set; }
+        public static Native._NtAllocateVirtualMemory NtAllocateVirtualMemory { get; private set; }
 
         private static void StealthUpdate()
         {
@@ -1250,6 +1289,7 @@ namespace System
                 ResumeThread = Native.ResumeThreadM;
                 LoadLibrary = Native.LoadLibraryM;
                 QueueUserAPC2 = Native.QueueUserAPC2M;
+                NtAllocateVirtualMemory = Native.NtAllocateVirtualMemoryM;
             }
             else
             {
@@ -1265,6 +1305,7 @@ namespace System
                 ResumeThread = Native.ResumeThreadP;
                 LoadLibrary = Native.LoadLibraryP;
                 QueueUserAPC2 = Native.QueueUserAPC2P;
+                NtAllocateVirtualMemory = Native.NtAllocateVirtualMemoryP;
 #else
                 WriteProcessMemory = Native.WriteProcessMemoryD;
                 ReadProcessMemory = Native.ReadProcessMemoryD;
@@ -1277,6 +1318,7 @@ namespace System
                 ResumeThread = Native.ResumeThreadD;
                 LoadLibrary = Native.LoadLibraryD;
                 QueueUserAPC2 = Native.QueueUserAPC2D;
+                NtAllocateVirtualMemory = Native.NtAllocateVirtualMemoryD;
 #endif
             }
         }

@@ -39,7 +39,7 @@ namespace System.ExThreads
         {
             //Get/SetThreadContext needs to be 16 byte aligned memory offset on x64
             hInternalMemory = Marshal.AllocHGlobal(Marshal.SizeOf(ContextStruct) + 1024);
-            hAlignedMemory = (long)hInternalMemory & ~0xF;
+            hAlignedMemory = (long)(hInternalMemory + 0xF) & ~0xF;
         }
 
         public void Dispose()

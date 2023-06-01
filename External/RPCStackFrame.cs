@@ -84,7 +84,7 @@ namespace System
 
             if(obj.GetType().IsEnum)
             {
-                Arguments.Add(new RPCArgument(UtilExtensions.ToByteArray(Convert.ToInt64(obj)), false));
+                Arguments.Add(new RPCArgument(UtilExtensions.ToByteArray(Convert.ToInt32(obj)), false));
                 return;
             }
    

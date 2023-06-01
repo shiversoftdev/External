@@ -533,7 +533,7 @@ namespace System
             {
                 if (HostProcess.Handle)
                 {
-                    ProcessEx.VirtualFreeEx(HostProcess.Handle, hModule, (uint)sModule.Headers.PEHeader.SizeOfImage, (int)FreeType.Release);
+                    ProcessEx.VirtualFreeEx(HostProcess.Handle, hModule, (uint)0, (int)FreeType.Release);
                 }
                 throw;
             }

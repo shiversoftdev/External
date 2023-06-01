@@ -138,6 +138,7 @@ namespace System
         {
             try
             {
+                RTModulesRegistry.Clear();
                 BaseProcess = Process.GetProcessById(BaseProcess.Id);
             }
             catch
@@ -198,6 +199,7 @@ namespace System
             if (typeof(T) == typeof(ushort)) return (dynamic)BitConverter.ToUInt16(data, 0);
             if (typeof(T) == typeof(byte)) return (dynamic)data[0];
             if (typeof(T) == typeof(sbyte)) return (dynamic)data[0];
+            if (typeof(T) == typeof(char)) return (dynamic)(char)data[0];
             throw new InvalidCastException(DSTR(DSTR_INVALID_VALUETYPE, typeof(T).ToString()));
         }
 
@@ -219,6 +221,7 @@ namespace System
             else if (value is ushort u) data = BitConverter.GetBytes(u);
             else if (value is byte b) data = new byte[] { b };
             else if (value is sbyte sb) data = new byte[] { (byte)sb };
+            else if (value is char c) data = new byte[] { (byte)c };
             else throw new InvalidCastException(DSTR(DSTR_INVALID_VALUETYPE, typeof(T).ToString()));
             SetBytes(absoluteAddress, data);
         }
@@ -411,25 +414,26 @@ namespace System
         public PointerEx LdrLoadDllRemote(string dllPath)
         {
             Native.UNICODE_STRING uModuleName = new Native.UNICODE_STRING();
-            Native.RtlInitUnicodeStringD(ref uModuleName, dllPath);
-            var Address = GetProcAddress(@"ntdll.dll", @"LdrLoadDll");
+            var wide = Encoding.Convert(Encoding.ASCII, Encoding.Unicode, Encoding.ASCII.GetBytes(dllPath));
+            uModuleName.Length = (ushort)wide.Length;
+            uModuleName.MaximumLength = uModuleName.Length;
 
-            // copy the string data
-            byte[] stringContents = new byte[uModuleName.MaximumLength];
-            Marshal.Copy(uModuleName.Buffer, stringContents, 0, uModuleName.Length);
             var remoteBuff = QuickAlloc((int)uModuleName.MaximumLength);
-            SetBytes(remoteBuff, stringContents);
+            SetBytes(remoteBuff, wide);
             uModuleName.Buffer = remoteBuff;
+
+            var Address = GetProcAddress(@"ntdll.dll", @"LdrLoadDll");
 
             object[] args =
             {
-                0L, 0L, uModuleName, new byte[sizeof(long)]
+                0, 0, uModuleName, new byte[PointerSize()]
             };
             try
             {
-                Native.NTSTATUS returnStatus = (Native.NTSTATUS)CallRef<int>(Address, ref args);
+                Native.NTSTATUS returnStatus = (Native.NTSTATUS)CallRefStd<int>(Address, ref args);
                 if (returnStatus != Native.NTSTATUS.Success)
                 {
+                    DLog($"LdrLoadDLLRemote Failed: {returnStatus}, {uModuleName.Buffer.ToInt32():X}, {Address:X}, ");
                     return 0;
                 }
             }
@@ -437,12 +441,15 @@ namespace System
             {
                 try
                 {
-                    VirtualFreeEx(Handle, remoteBuff, uModuleName.MaximumLength, (int)FreeType.Release);
+                    if(Handle)
+                    {
+                        VirtualFreeEx(Handle, remoteBuff, 0, (int)FreeType.Release);
+                    }
                 }
                 catch { }
             }
             Refresh(); // so that any relevant dependencies are passed into the process context for modules
-            return BitConverter.ToInt64((byte[])args[3], 0);
+            return PointerSize()  == 8 ? BitConverter.ToInt64((byte[])args[3], 0) : BitConverter.ToInt32((byte[])args[3], 0);
         }
 
         /// <summary>
@@ -496,7 +503,7 @@ namespace System
 
         public int PointerSize()
         {
-            return GetArchitecture() == Architecture.X86 ? sizeof(uint) : sizeof(ulong);
+            return (GetArchitecture() == Architecture.X86) ? sizeof(uint) : sizeof(ulong);
         }
 
         /// <summary>
@@ -507,7 +514,18 @@ namespace System
         /// <returns></returns>
         public T Call<T>(PointerEx absoluteAddress, params object[] args)
         {
-            return __CallAsync<T>(absoluteAddress, DefaultRPCType, null, args).Result;
+            return __CallAsync<T>(absoluteAddress, DefaultRPCType, null, true, args).Result;
+        }
+
+        /// <summary>
+        /// Call a remote procedure (stdcall, 32bit only), with a return type. Arguments are not passed by reference, and may not be manipulated by the calling process. Structs are shallow copy. Will await return signal.
+        /// </summary>
+        /// <param name="absoluteAddress"></param>
+        /// <param name="args"></param>
+        /// <returns></returns>
+        public T CallStd<T>(PointerEx absoluteAddress, params object[] args)
+        {
+            return __CallAsync<T>(absoluteAddress, DefaultRPCType, null, false, args).Result;
         }
 
         /// <summary>
@@ -518,7 +536,7 @@ namespace System
         /// <returns></returns>
         public void Call(PointerEx absoluteAddress, params object[] args)
         {
-            _ = __CallAsync<VOID>(absoluteAddress, DefaultRPCType, null, args).Result;
+            _ = __CallAsync<VOID>(absoluteAddress, DefaultRPCType, null, true, args).Result;
         }
 
         /// <summary>
@@ -530,7 +548,7 @@ namespace System
         /// <returns></returns>
         public T CallByMethod<T>(PointerEx absoluteAddress, ExCallThreadType callType, params object[] args)
         {
-            return __CallAsync<T>(absoluteAddress, callType, null, args).Result;
+            return __CallAsync<T>(absoluteAddress, callType, null, true, args).Result;
         }
 
         /// <summary>
@@ -542,7 +560,7 @@ namespace System
         /// <returns></returns>
         public void CallByMethod(PointerEx absoluteAddress, ExCallThreadType callType, params object[] args)
         {
-            _ = __CallAsync<VOID>(absoluteAddress, callType, null, args).Result;
+            _ = __CallAsync<VOID>(absoluteAddress, callType, null, true, args).Result;
         }
 
         /// <summary>
@@ -553,7 +571,18 @@ namespace System
         /// <returns></returns>
         public T CallRef<T>(PointerEx absoluteAddress, ref object[] args)
         {
-            return CallRefByMethod<T>(absoluteAddress, DefaultRPCType, ref args);
+            return CallRefByMethod<T>(absoluteAddress, DefaultRPCType, true, ref args);
+        }
+
+        /// <summary>
+        /// Call a remote procedure, with a return type. Arguments are passed by array reference, and the modified array will be the resultant params from proc. Structs are shallow copy. Will await return signal.
+        /// </summary>
+        /// <param name="absoluteAddress"></param>
+        /// <param name="args"></param>
+        /// <returns></returns>
+        public T CallRefStd<T>(PointerEx absoluteAddress, ref object[] args)
+        {
+            return CallRefByMethod<T>(absoluteAddress, DefaultRPCType, false, ref args);
         }
 
         /// <summary>
@@ -564,7 +593,7 @@ namespace System
         /// <returns></returns>
         public void CallRef(PointerEx absoluteAddress, ref object[] args)
         {
-            _ = CallRefByMethod<VOID>(absoluteAddress, DefaultRPCType, ref args);
+            _ = CallRefByMethod<VOID>(absoluteAddress, DefaultRPCType, true, ref args);
         }
 
         /// <summary>
@@ -574,7 +603,7 @@ namespace System
         /// <param name="callType">Type of call to initiate. Some call types must be initialized to be used.</param>
         /// <param name="args"></param>
         /// <returns></returns>
-        public T CallRefByMethod<T>(PointerEx absoluteAddress, ExCallThreadType callType, ref object[] args)
+        public T CallRefByMethod<T>(PointerEx absoluteAddress, ExCallThreadType callType, bool isCallerCleaned, ref object[] args)
         {
             if(args == null)
             {
@@ -586,7 +615,7 @@ namespace System
             {
                 args.CopyTo(rpcData.ParamData, 0);
             }
-            var result = __CallAsync<T>(absoluteAddress, callType, rpcData, args).Result;
+            var result = __CallAsync<T>(absoluteAddress, callType, rpcData, isCallerCleaned, args).Result;
             if (args.Length > 0)
             {
                 rpcData.ParamData.CopyTo(args, 0);
@@ -602,7 +631,7 @@ namespace System
         /// <returns></returns>
         public async Task<T> CallAsync<T>(PointerEx absoluteAddress, params object[] args)
         {
-            return await __CallAsync<T>(absoluteAddress, DefaultRPCType, null, args);
+            return await __CallAsync<T>(absoluteAddress, DefaultRPCType, null, true, args);
         }
 
         /// <summary>
@@ -613,7 +642,7 @@ namespace System
         /// <returns></returns>
         public async Task<T> CallAsyncByMethod<T>(PointerEx absoluteAddress, ExCallThreadType callType, params object[] args)
         {
-            return await __CallAsync<T>(absoluteAddress, callType, null, args);
+            return await __CallAsync<T>(absoluteAddress, callType, null, true, args);
         }
 
         /// <summary>
@@ -625,7 +654,7 @@ namespace System
         /// <param name="args"></param>
         /// <returns></returns>
 #pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
-        private async Task<T> __CallAsync<T>(PointerEx absoluteAddress, ExCallThreadType callType, RPCParams outParams, object[] args)
+        private async Task<T> __CallAsync<T>(PointerEx absoluteAddress, ExCallThreadType callType, RPCParams outParams, bool isCallerCleaned, object[] args)
 #pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
         {
             if (typeof(T) != typeof(VOID) && !RPCStackFrame.CanSerializeType(typeof(T)))
@@ -684,7 +713,7 @@ namespace System
                 }
 
                 // Write shellcode
-                byte[] shellcode = ExAssembler.CreateRemoteCall(absoluteAddress, ArgumentList, PointerSize(), raxStorAddress, threadStateAddress, xmmArgMask, xmmRetType);
+                byte[] shellcode = ExAssembler.CreateRemoteCall(absoluteAddress, ArgumentList, PointerSize(), raxStorAddress, threadStateAddress, isCallerCleaned, xmmArgMask, xmmRetType);
                 PointerEx shellSize = shellcode.Length;
                 PointerEx hShellcode = QuickAlloc(shellSize, true);
 
@@ -741,6 +770,7 @@ namespace System
                                 outParams.ParamData[i] = GetString(__handle);
                                 continue;
                             }
+
                             if(__type == typeof(byte[]))
                             {
                                 outParams.ParamData[i] = GetBytes(__handle, ((byte[])outParams.ParamData[i]).Length);
@@ -755,7 +785,15 @@ namespace System
                     if (typeof(T) == typeof(VOID)) return default;
 
                     // read return value
-                    PointerEx r_val = (PointerSize() == 4 ? GetValue<uint>(raxStorAddress) : GetValue<ulong>(raxStorAddress));
+                    PointerEx r_val = 0;
+                    if (PointerSize() == 4)
+                    {
+                        r_val = GetValue<uint>(raxStorAddress);
+                    }
+                    else
+                    {
+                        r_val = GetValue<ulong>(raxStorAddress);
+                    }
 
                     // if its a string...
                     if (typeof(T) == typeof(string))
@@ -764,7 +802,7 @@ namespace System
                     }
 
                     // if its a value type that fits in a pointerex...
-                    if(Marshal.SizeOf(default(T)) <= Marshal.SizeOf(default(PointerEx)))
+                    if(Marshal.SizeOf(typeof(T)) <= Marshal.SizeOf(typeof(PointerEx)))
                     {
                         try
                         {
@@ -783,7 +821,7 @@ namespace System
                 {
                     if (Handle)
                     {
-                        VirtualFreeEx(Handle, hShellcode, shellSize, (int)FreeType.Release);
+                        VirtualFreeEx(Handle, hShellcode, 0, (int)FreeType.Release);
                     }
                 }
             }
@@ -791,7 +829,7 @@ namespace System
             {
                 if(Handle)
                 {
-                    VirtualFreeEx(Handle, hStack, stackSize, (int)FreeType.Release);
+                    VirtualFreeEx(Handle, hStack, 0, (int)FreeType.Release);
                 }
             }
             return default(T);
@@ -825,19 +863,43 @@ namespace System
                         throw new Exception(DSTR(DSTR_OPEN_THREAD_FAILED));
                     }
 
-                    NativeStealth.SuspendThread(hThread);
-
-                    if(GetArchitecture() == Architecture.X86)
+                    int res = -1;
+                    for(int i = 0; i < 10 && (res = NativeStealth.SuspendThread(hThread)) == -1; i++)
                     {
+                        Thread.Sleep(1);
+                    }
 
+                    if(res < 0)
+                    {
+#if DEV
+                        System.IO.File.AppendAllText("log.txt", $"suspend failed\n");
+#endif
+                        throw new Exception(DSTR(DSTR_SUSPEND_TIMEOUT));
+                    }
+                    else
+                    {
+#if DEV
+                        System.IO.File.AppendAllText("log.txt", $"suspend succeeded\n");
+#endif
+                    }
+
+                    if (GetArchitecture() == Architecture.X86)
+                    {
                         ThreadContext32Ex ctx32 = new ThreadContext32Ex(ThreadContextExFlags.All);
                         if(!ctx32.GetContext(hThread))
                         {
                             throw new Exception(DSTR(DSTR_THREAD_CTX_FAILED));
                         }
 
+#if DEV
+                        System.IO.File.AppendAllText("log.txt", $"context retrieved {ctx32}\n");
+#endif
+
                         HijackRipInternal32(hThread, hShellcode, hThreadResume, ctx32);
                         ctx32.SetContext(hThread);
+#if DEV
+                        System.IO.File.AppendAllText("log.txt", $"context adjusted\n");
+#endif
                     }
                     else
                     {
@@ -852,7 +914,25 @@ namespace System
                         ctx64.SetContext(hThread);
                     }
 
-                    NativeStealth.ResumeThread(hThread);
+                    for (int i = 0; i < 10 && (res = NativeStealth.ResumeThread(hThread)) == -1; i++)
+                    {
+                        Thread.Sleep(1);
+                    }
+
+                    if (res < 0)
+                    {
+#if DEV
+                        System.IO.File.AppendAllText("log.txt", $"resume failed\n");
+#endif
+                        throw new Exception(DSTR(DSTR_RESUME_TIMEOUT));
+                    }
+                    else
+                    {
+#if DEV
+                        System.IO.File.AppendAllText("log.txt", $"resume succeeded\n");
+#endif
+                    }
+
                     CloseHandle(hThread);
 
 #if DEV
@@ -886,8 +966,8 @@ namespace System
             {
                 if(Handle)
                 {
-                    VirtualFreeEx(Handle, hThreadResume, 4096, (int)FreeType.Release);
-                    VirtualFreeEx(Handle, hXmmSpace, 256 * 2, (int)FreeType.Release);
+                    VirtualFreeEx(Handle, hThreadResume, 0, (int)FreeType.Release);
+                    VirtualFreeEx(Handle, hXmmSpace, 0, (int)FreeType.Release);
                 }
             }
             
@@ -932,7 +1012,12 @@ namespace System
                 throw new Exception(DSTR(DSTR_OPEN_THREAD_FAILED));
             }
 
-            NativeStealth.QueueUserAPC2(hShellcode, hThread, 1);
+            var res = NativeStealth.QueueUserAPC2(hShellcode, hThread, 1);
+
+            if(res != 0)
+            {
+                throw new Exception($"QUAPC2 failed with code {res}");
+            }
 
             CloseHandle(hThread);
 
@@ -961,6 +1046,14 @@ namespace System
         }
 
         /// <summary>
+        /// Toggle to true when quick alloc should only allocate executable memory. (rarely needed)
+        /// </summary>
+        public bool ExecutableOnlyQuickAlloc = false;
+        /// <summary>
+        /// Determines whether to use NtAllocateVirtualMemory (if true) or VirtualAllocEx (if false)
+        /// </summary>
+        public bool UseNTAllocQuickAlloc = false;
+        /// <summary>
         /// Allocate readable and writable memory in the target process. If executable is true, it will also be executable. Is not managed and can be leaked, so remember to free the memory when it is no longer needed.
         /// </summary>
         /// <param name="size_region"></param>
@@ -972,7 +1065,36 @@ namespace System
             {
                 throw new InvalidOperationException(DSTR(DSTR_ALLOC_NO_HANDLE));
             }
-            return NativeStealth.VirtualAllocEx(Handle, 0, size_region, Native.AllocationType.Commit, Executable ? Native.MemoryProtection.ExecuteReadWrite : Native.MemoryProtection.ReadWrite);
+
+            PointerEx res;
+            if (UseNTAllocQuickAlloc)
+            {
+                res = 0;
+                uint size_region_ref = size_region;
+                var result = NativeStealth.NtAllocateVirtualMemory(Handle, ref res, 0, ref size_region_ref, Native.AllocationType.Commit | Native.AllocationType.Reserve, (Executable || ExecutableOnlyQuickAlloc) ? Native.MemoryProtection.ExecuteReadWrite : Native.MemoryProtection.ReadWrite);
+
+                if (result)
+                {
+                    throw new Exception($"QuickAlloc failed with code {result:X}");
+                }
+            }
+            else
+            {
+                res = NativeStealth.VirtualAllocEx(Handle, 0, size_region, Native.AllocationType.Commit | Native.AllocationType.Reserve, (Executable || ExecutableOnlyQuickAlloc) ? Native.MemoryProtection.ExecuteReadWrite : Native.MemoryProtection.ReadWrite);
+            }
+
+#if USE_PINVOKE
+            if(res == 0)
+            {
+                throw new Exception($"QuickAlloc failed with code {Marshal.GetLastWin32Error():X}");
+            }
+#else
+            if(res == 0)
+            {
+                throw new Exception($"QuickAlloc failed.");
+            }
+#endif
+            return res;
         }
 
         /// <summary>
@@ -1135,7 +1257,7 @@ namespace System
             return 0;
         }
 
-        public PointerEx AddOffsetArray(PointerEx absoluteAddress, PointerEx[] offsets)
+        public PointerEx FollowOffsetArray(PointerEx absoluteAddress, PointerEx[] offsets)
         {
             PointerEx result = absoluteAddress;
             foreach (PointerEx offset in offsets)
@@ -1319,7 +1441,7 @@ namespace System
         XCTT_DebugBreakpoint_Direct,
 
         /// <summary>
-        /// Queue a user APC to execute the RPC on the main thread (preferred RPC method).
+        /// Queue a user APC to execute the RPC on the main thread (preferred RPC method) (Not working in 32-bit).
         /// </summary>
         XCTT_QUAPC
     }

@@ -113,6 +113,11 @@ namespace System.ExThreads
             return NativeStealth.GetThreadContext(thread, context);
         }
 
+        public override string ToString()
+        {
+            return $"eax {ctx.Eax:X} ebx {ctx.Ebx:X} ecx {ctx.Ecx:X} edx {ctx.Edx:X} eip {ctx.Eip:X} esp {ctx.Esp:X} ebp {ctx.Ebp:X} esi {ctx.Esi:X} edi {ctx.Edi:X} eflags {ctx.EFlags:X}";
+        }
+
         /// <summary>
         /// Switch threadcontext flags to debug, and apply dr configurations
         /// </summary>

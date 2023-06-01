@@ -14,13 +14,13 @@ namespace System
         private const int ARG_R8 = 2;
         private const int ARG_R9 = 3;
 
-        public static byte[] CreateRemoteCall(PointerEx jumpLocation, PointerEx[] args, int pointerSize, PointerEx raxStorAddress, PointerEx threadStateAddress, byte xmmMask_64 = 0, ExXMMReturnType xmmReturnType = ExXMMReturnType.XMMR_NONE)
+        public static byte[] CreateRemoteCall(PointerEx jumpLocation, PointerEx[] args, int pointerSize, PointerEx raxStorAddress, PointerEx threadStateAddress, bool isCallerCleaned, byte xmmMask_64 = 0, ExXMMReturnType xmmReturnType = ExXMMReturnType.XMMR_NONE)
         {
             if (pointerSize == 8)
             {
                 return CreateRemoteCall64(jumpLocation, args, raxStorAddress, threadStateAddress, xmmMask_64, xmmReturnType);
             }
-            return CreateRemoteCall32(jumpLocation, args, raxStorAddress, threadStateAddress);
+            return CreateRemoteCall32(jumpLocation, args, raxStorAddress, threadStateAddress, isCallerCleaned);
         }
 
         private static byte[] CreateRemoteCall64(PointerEx jumpLocation, PointerEx[] args, PointerEx raxStorAddress, PointerEx threadStateAddress, byte xmmMask, ExXMMReturnType xmmReturnType)
@@ -238,7 +238,7 @@ namespace System
             return data.ToArray();
         }
 
-        private static byte[] CreateRemoteCall32(PointerEx jumpLocation, PointerEx[] args, PointerEx eaxStorAddress, PointerEx threadStateAddress)
+        private static byte[] CreateRemoteCall32(PointerEx jumpLocation, PointerEx[] args, PointerEx eaxStorAddress, PointerEx threadStateAddress, bool callerClean)
         {
             List<byte> data = new List<byte>();
 
@@ -260,10 +260,8 @@ namespace System
             // mov eax, jumpLoc
             data.Add(0xB8);
             data.AddRange(BitConverter.GetBytes((int)jumpLocation));
-
             // call eax
             data.AddRange(new byte[] { 0xFF, 0xD0 });
-
             if (eaxStorAddress)
             {
                 // mov eaxStorAddress, eax
@@ -278,6 +276,15 @@ namespace System
             // change thread state to finished
             // mov DWORD PTR [eax], 0x1
             data.AddRange(new byte[] { 0xC7, 0x00, 0x01, 0x00, 0x00, 0x00 });
+
+            if(callerClean)
+            {
+                foreach (var arg in args.Reverse())
+                {
+                    // pop int32 eax
+                    data.Add(0x58);
+                }
+            }
 
             // xor eax, eax
             data.AddRange(new byte[] { 0x33, 0xC0 });
@@ -306,7 +313,6 @@ namespace System
 
             // call eax
             data.AddRange(new byte[] { 0xff, 0xd0 });
-
             // popf
             data.Add(0x9d);
 
