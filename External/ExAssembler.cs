@@ -79,17 +79,17 @@ namespace System
                                 break;
                             }
 
-                            if (arg <= (long)uint.MaxValue)
-                            {
-                                // mov ecx, arg
-                                data.Add(0xB9);
-                                data.AddRange(BitConverter.GetBytes((int)arg));
-                                break;
-                            }
+                            //if (arg <= (long)uint.MaxValue)
+                            //{
+                            //    // mov ecx, arg
+                            //    data.Add(0xB9);
+                            //    data.AddRange(BitConverter.GetBytes((int)arg));
+                            //    break;
+                            //}
 
                             // mov rcx, arg
                             data.AddRange(new byte[] { 0x48, 0xB9 });
-                            data.AddRange(BitConverter.GetBytes((long)arg));
+                            data.AddRange(BitConverter.GetBytes((ulong)arg));
                         }
                         break;
                     case ARG_RDX:
@@ -101,17 +101,17 @@ namespace System
                                 break;
                             }
 
-                            if (arg <= (long)uint.MaxValue)
-                            {
-                                // mov edx, arg
-                                data.Add(0xBA);
-                                data.AddRange(BitConverter.GetBytes((int)arg));
-                                break;
-                            }
+                            //if (arg <= (long)uint.MaxValue)
+                            //{
+                            //    // mov edx, arg
+                            //    data.Add(0xBA);
+                            //    data.AddRange(BitConverter.GetBytes((int)arg));
+                            //    break;
+                            //}
 
                             // mov rdx, arg
                             data.AddRange(new byte[] { 0x48, 0xBA });
-                            data.AddRange(BitConverter.GetBytes((long)arg));
+                            data.AddRange(BitConverter.GetBytes((ulong)arg));
                         }
                         break;
                     case ARG_R8:
@@ -123,17 +123,17 @@ namespace System
                                 break;
                             }
 
-                            if (arg <= (long)uint.MaxValue)
-                            {
-                                // mov r8d, arg
-                                data.AddRange(new byte[] { 0x41, 0xB8 });
-                                data.AddRange(BitConverter.GetBytes((int)arg));
-                                break;
-                            }
+                            //if (arg <= (long)uint.MaxValue)
+                            //{
+                            //    // mov r8d, arg
+                            //    data.AddRange(new byte[] { 0x41, 0xB8 });
+                            //    data.AddRange(BitConverter.GetBytes((int)arg));
+                            //    break;
+                            //}
 
                             // mov r8, arg
                             data.AddRange(new byte[] { 0x49, 0xB8 });
-                            data.AddRange(BitConverter.GetBytes((long)arg));
+                            data.AddRange(BitConverter.GetBytes((ulong)arg));
                         }
                         break;
                     case ARG_R9:
@@ -145,17 +145,17 @@ namespace System
                                 break;
                             }
 
-                            if (arg <= (long)uint.MaxValue)
-                            {
-                                // mov r9d, arg
-                                data.AddRange(new byte[] { 0x41, 0xB9 });
-                                data.AddRange(BitConverter.GetBytes((int)arg));
-                                break;
-                            }
+                            //if (arg <= (long)uint.MaxValue)
+                            //{
+                            //    // mov r9d, arg
+                            //    data.AddRange(new byte[] { 0x41, 0xB9 });
+                            //    data.AddRange(BitConverter.GetBytes((int)arg));
+                            //    break;
+                            //}
 
                             // mov r9, arg
                             data.AddRange(new byte[] { 0x49, 0xB9 });
-                            data.AddRange(BitConverter.GetBytes((long)arg));
+                            data.AddRange(BitConverter.GetBytes((ulong)arg));
                         }
                         break;
                     default:

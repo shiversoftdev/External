@@ -433,7 +433,7 @@ namespace System
                 Native.NTSTATUS returnStatus = (Native.NTSTATUS)CallRefStd<int>(Address, ref args);
                 if (returnStatus != Native.NTSTATUS.Success)
                 {
-                    DLog($"LdrLoadDLLRemote Failed: {returnStatus}, {uModuleName.Buffer.ToInt32():X}, {Address:X}, ");
+                    DLog($"LdrLoadDLLRemote Failed: {returnStatus}, {uModuleName.Buffer.ToInt64():X}, {Address:X}, ");
                     return 0;
                 }
             }
